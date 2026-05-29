@@ -726,7 +726,26 @@ select option{background:var(--sf2)}
 <div id="mcat" class="mbg">
   <div class="modal">
     <div class="mhdl"></div>
-    <div class="mtt"><h3>Nueva categoría</h3><button class="mcl" onclick="cerrar('mcat')">×</button></div>
+    <div class="mtt"><h3 id="mcat-titulo">Nueva categoría</h3><button class="mcl" onclick="cerrar('mcat')">×</button></div>
+
+    <!-- Selector de modo -->
+    <div id="mcat-modo-sel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <button class="tto aG" id="modo-btn-principal" onclick="setCatModo('principal',this)" style="border-color:var(--AC);background:var(--ACb);color:var(--ACt)">
+        <span class="ti">🏷</span>Categoría principal
+      </button>
+      <button class="tto" id="modo-btn-sub" onclick="setCatModo('sub',this)">
+        <span class="ti">↳</span>Subcategoría de...
+      </button>
+    </div>
+
+    <!-- Bloque subcategoría padre (solo en modo sub) -->
+    <div id="mcat-padre-blk" style="display:none;margin-bottom:10px">
+      <div class="fg">
+        <label>¿Subcategoría de qué categoría?</label>
+        <select id="catpadre"></select>
+      </div>
+    </div>
+
     <div class="f2">
       <div class="fg"><label>Nombre</label><input type="text" id="catnombre" placeholder="Ej: Mascotas"></div>
       <div class="fg"><label>Icono (emoji)</label><input type="text" id="caticono" placeholder="🐾" maxlength="2"></div>
@@ -735,14 +754,11 @@ select option{background:var(--sf2)}
       <div class="fg"><label>Tipo</label>
         <select id="cattipo"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option></select>
       </div>
-      <div class="fg"><label>Categoría padre</label><select id="catpadre"><option value="">Sin padre (principal)</option></select></div>
-    </div>
-    <div class="f2">
       <div class="fg"><label>¿Presupuesto fijo?</label>
         <select id="catfijo"><option value="no">No (ajustar cada mes)</option><option value="si">Sí (se copia automático)</option></select>
       </div>
-      <div class="fg"><label>Color</label><input type="color" id="catcolor" value="#6366f1"></div>
     </div>
+    <div class="fg"><label>Color</label><input type="color" id="catcolor" value="#6366f1" style="height:38px"></div>
     <div class="ma"><button class="btn btnS" onclick="cerrar('mcat')">Cancelar</button><button class="btn btnP" onclick="guardarCat()">Guardar</button></div>
   </div>
 </div>
@@ -896,9 +912,14 @@ function guardarCfg(){
 // ─── Poblar selects ────────────────────────────────────────
 function pCats(elId,filtro,conPadre=false){
   const el=$(elId); if(!el) return;
-  let lista=filtro?_cats.filter(c=>c.tipo===filtro):_cats.filter(c=>c.tipo!=='transferencia');
-  if(!conPadre) lista=lista.filter(c=>!c.categoria_padre_id);
-  el.innerHTML=lista.map(c=>`<option value="${c.id}">${c.icono} ${c.nombre}</option>`).join('');
+  let lista=_cats.filter(c=>c.id&&String(c.id).length>0);
+  if(filtro) lista=lista.filter(c=>c.tipo===filtro);
+  else lista=lista.filter(c=>c.tipo!=='transferencia');
+  if(!conPadre){
+    // Solo categorías principales: sin padre o con string vacío
+    lista=lista.filter(c=>!String(c.categoria_padre_id||'').trim());
+  }
+  el.innerHTML=lista.map(c=>`<option value="${c.id}">${c.icono||'📌'} ${c.nombre}</option>`).join('');
 }
 function pCtas(elId,empty=''){
   const el=$(elId); if(!el) return;
@@ -930,9 +951,11 @@ function sTipo(tipo,btn){
 
 function cSubcats(){
   const catId=$('txcat')?.value;
-  const subs=catId?_cats.filter(c=>c.categoria_padre_id===catId):[];
+  // Comparar como string para evitar problemas de tipo
+  const subs=catId?_cats.filter(c=>String(c.categoria_padre_id||'')===String(catId)):[];
   const el=$('txsub'); if(!el) return;
-  el.innerHTML='<option value="">Sin subcategoría</option>'+subs.map(c=>`<option value="${c.id}">${c.icono} ${c.nombre}</option>`).join('');
+  el.innerHTML='<option value="">Sin subcategoría</option>'+
+    subs.map(c=>`<option value="${c.id}">${c.icono||'📌'} ${c.nombre}</option>`).join('');
 }
 function togCuotas(){$('txcuotas-g').style.display=$('txtar')?.value?'flex':'none';}
 
@@ -989,8 +1012,15 @@ function abrirMant(){
   $('mmant').classList.add('on');
 }
 function abrirCat(){
-  pCats('catpadre','gasto');
-  $('catpadre').innerHTML='<option value="">Sin padre (principal)</option>'+$('catpadre').innerHTML;
+  _catModo='principal';
+  ['catnombre','caticono'].forEach(id=>$(id).value='');
+  $('catcolor').value='#6366f1';
+  $('cattipo').value='gasto';
+  $('catfijo').value='no';
+  $('mcat-titulo').textContent='Nueva categoría principal';
+  $('mcat-padre-blk').style.display='none';
+  $('modo-btn-principal').style.cssText='border-color:var(--AC);background:var(--ACb);color:var(--ACt)';
+  $('modo-btn-sub').style.cssText='';
   $('mcat').classList.add('on');
 }
 function abrirParte(){$('mparte').classList.add('on');}
@@ -1363,35 +1393,71 @@ async function guardarMant(){
 }
 
 // ════════════ CATEGORÍAS ════════════
+let _catModo='principal';
+
+function setCatModo(modo,btn){
+  _catModo=modo;
+  [$('modo-btn-principal'),$('modo-btn-sub')].forEach(b=>{if(b)b.style.cssText='';});
+  if(btn) btn.style.cssText='border-color:var(--AC);background:var(--ACb);color:var(--ACt)';
+  const esSub=modo==='sub';
+  $('mcat-padre-blk').style.display=esSub?'block':'none';
+  $('mcat-titulo').textContent=esSub?'Nueva subcategoría':'Nueva categoría principal';
+  if(esSub){
+    // Solo categorías principales
+    const principales=_cats.filter(c=>!String(c.categoria_padre_id||'').trim());
+    $('catpadre').innerHTML=principales.map(c=>`<option value="${c.id}">${c.icono||'📌'} ${c.nombre}</option>`).join('');
+  }
+}
+
 async function cCategorias(){
   const data=await api({accion:'getCategorias'}); if(!data) return;
   _cats=data;
-  const padres=data.filter(c=>!c.categoria_padre_id);
-  $('catlista').innerHTML=padres.map(p=>{
-    const hijos=data.filter(c=>c.categoria_padre_id===p.id);
+  // Padre = sin categoria_padre_id o con string vacío
+  const esPadre = c => !String(c.categoria_padre_id||'').trim();
+  const padres=data.filter(esPadre);
+  $('catlista').innerHTML=padres.length ? padres.map(p=>{
+    const hijos=data.filter(c=>String(c.categoria_padre_id||'').trim()===p.id);
     return`<div style="margin-bottom:6px">
       <div class="cat-p">
-        <span style="font-size:17px">${p.icono}</span>
+        <span style="font-size:17px">${p.icono||'📌'}</span>
         <span style="font-size:13px;font-weight:500;flex:1">${p.nombre}</span>
         <span class="bd_ ${p.tipo==='ingreso'?'bG':'bR'}" style="font-size:10px">${p.tipo}</span>
         ${p.presupuesto_fijo==='si'?'<span class="bd_ bB" style="font-size:10px;margin-left:3px">fijo</span>':''}
+        <button class="cat-del" onclick="abrirSubCat('${p.id}')" title="Agregar subcategoría" style="color:var(--ACt);font-size:11px;padding:2px 6px">+sub</button>
         <button class="cat-del" onclick="elimCat('${p.id}')">×</button>
       </div>
       ${hijos.length?`<div class="cat-c">${hijos.map(h=>`
         <div class="cat-ch">
-          <span style="font-size:14px">${h.icono}</span>
+          <span style="font-size:14px">${h.icono||'📌'}</span>
           <span style="font-size:12px;flex:1">${h.nombre}</span>
+          <span class="bd_ bAC" style="font-size:10px">sub</span>
           <button class="cat-del" onclick="elimCat('${h.id}')">×</button>
         </div>`).join('')}</div>`:''}
     </div>`;
-  }).join('');
+  }).join('') : `<div class="empty"><div class="ei">🏷</div><p>Sin categorías personalizadas.</p></div>`;
 }
+
+function abrirSubCat(padreId){
+  abrirCat();
+  setCatModo('sub',$('modo-btn-sub'));
+  $('modo-btn-principal').style.cssText='';
+  setTimeout(()=>{ if($('catpadre')) $('catpadre').value=padreId; },50);
+}
+
 async function guardarCat(){
-  const r=await apiPost({accion:'insertCategoria',nombre:$('catnombre').value,tipo:$('cattipo').value,icono:$('caticono').value||'📌',color:$('catcolor').value,presupuesto_fijo:$('catfijo').value,categoria_padre_id:$('catpadre').value});
-  if(r?.ok){toast('✅ Categoría creada');cerrar('mcat');_cats=[];cCategorias();} else toast('❌ '+(r?.error||'Error'));
+  const nombre=$('catnombre').value.trim();
+  if(!nombre){toast('Ingresa el nombre');return;}
+  const padreid=_catModo==='sub'?$('catpadre').value:'';
+  const r=await apiPost({accion:'insertCategoria',nombre,tipo:$('cattipo').value,
+    icono:$('caticono').value||'📌',color:$('catcolor').value,
+    presupuesto_fijo:$('catfijo').value,categoria_padre_id:padreid});
+  if(r?.ok){
+    toast(_catModo==='sub'?'✅ Subcategoría creada':'✅ Categoría creada');
+    cerrar('mcat');_cats=[];cCategorias();
+  } else toast('❌ '+(r?.error||'Error'));
 }
 async function elimCat(id){
-  if(!confirm('¿Eliminar categoría?')) return;
+  if(!confirm('¿Eliminar? Las subcategorías perderán el vínculo.')) return;
   const r=await apiPost({accion:'deleteCategoria',id});
   if(r?.ok){toast('Eliminada');cCategorias();} else toast('❌ Error');
 }
