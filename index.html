@@ -410,7 +410,14 @@ select option{background:var(--sf2)}
 
 <!-- TARJETAS -->
 <div id="page-tarjetas" class="pg">
-  <div class="ph"><h1>Tarjetas</h1><button class="btn btnP btn-sm" onclick="abrirTarjeta()">+ Agregar</button></div>
+  <div class="ph">
+    <h1>Tarjetas</h1>
+    <div class="phr">
+      <button class="btn btnS btn-sm" onclick="diagTarjetas()" title="Ver datos raw del Sheet">🔍</button>
+      <button class="btn btnS btn-sm" onclick="abrirRegistrarCuota()">+ Registrar compra</button>
+      <button class="btn btnP btn-sm" onclick="abrirTarjeta()">+ Agregar tarjeta</button>
+    </div>
+  </div>
   <div id="tarlista"><div class="loading"><span class="sp"></span>Cargando...</div></div>
 </div>
 
@@ -542,19 +549,46 @@ select option{background:var(--sf2)}
       <div class="fg"><label>Categoría</label><select id="txcat" onchange="cSubcats()"></select></div>
       <div class="fg"><label>Subcategoría</label><select id="txsub"><option value="">Sin subcategoría</option></select></div>
     </div>
-    <div class="f2">
-      <div class="fg"><label id="lbl-cta-orig">Cuenta</label><select id="txcta"></select></div>
-      <div class="fg" id="tx-ctadest-blk" style="display:none"><label>Cuenta destino</label><select id="txctadest"></select></div>
-    </div>
     <div class="fg"><label>Descripción</label><input type="text" id="txdesc" placeholder="Ej: Mercado semanal"></div>
+
+    <!-- FORMA DE PAGO: primero débito o crédito -->
     <div id="txtar-blk" style="display:none">
-      <div class="f2">
-        <div class="fg"><label>Pagar con tarjeta</label><select id="txtar" onchange="togCuotas()"><option value="">No (efectivo/débito)</option></select></div>
-        <div class="fg" id="txcuotas-g" style="display:none"><label>Cuotas</label>
-          <select id="txcuotas"><option value="1">1 (contado)</option><option value="2">2</option><option value="3">3</option><option value="6">6</option><option value="12">12</option><option value="18">18</option><option value="24">24</option><option value="36">36</option></select>
+      <label style="font-size:11px;color:var(--tx2);font-weight:500;display:block;margin-bottom:6px">Forma de pago</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <button class="tto" id="btn-no-tar" onclick="setUsaTarjeta(false)" style="padding:10px">
+          <span class="ti" style="font-size:20px;display:block;margin-bottom:3px">🏦</span>Débito / Efectivo
+        </button>
+        <button class="tto" id="btn-si-tar" onclick="setUsaTarjeta(true)" style="padding:10px">
+          <span class="ti" style="font-size:20px;display:block;margin-bottom:3px">💳</span>Tarjeta crédito
+        </button>
+      </div>
+
+      <!-- Bloque DÉBITO: muestra cuentas -->
+      <div id="tx-debito-blk">
+        <div class="fg"><label>Cuenta de débito</label><select id="txcta"></select></div>
+      </div>
+
+      <!-- Bloque CRÉDITO: muestra tarjetas + cuotas (SIN campo de cuenta) -->
+      <div id="tx-credito-blk" style="display:none">
+        <div class="f2">
+          <div class="fg">
+            <label>Tarjeta de crédito</label>
+            <select id="txtar"></select>
+          </div>
+          <div class="fg">
+            <label>Cuotas</label>
+            <input type="number" id="txcuotas" value="1" min="1" max="60" inputmode="numeric" placeholder="1">
+          </div>
         </div>
+        <div id="tx-cuota-preview" style="font-size:12px;color:var(--ACt);font-family:var(--mono);padding:4px 0 2px"></div>
       </div>
     </div>
+
+    <!-- Cuenta destino (solo para transferencias) -->
+    <div class="fg" id="tx-ctadest-blk" style="display:none">
+      <label>Cuenta destino</label><select id="txctadest"></select>
+    </div>
+
     <div class="fg"><label>Nota</label><textarea id="txnota" rows="2" placeholder="Detalles..."></textarea></div>
     <div class="ma"><button class="btn btnS" onclick="cerrar('mtx')">Cancelar</button><button class="btn btnP" onclick="guardarTx()">Guardar</button></div>
   </div>
@@ -602,28 +636,94 @@ select option{background:var(--sf2)}
   </div>
 </div>
 
+<!-- REGISTRAR COMPRA CON CUOTAS EN TARJETA -->
+<div id="mcuota-reg" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>💳 Registrar compra en tarjeta</h3><button class="mcl" onclick="cerrar('mcuota-reg')">×</button></div>
+    <p style="font-size:12px;color:var(--tx2);margin-bottom:12px;line-height:1.5">Registra una compra (nueva o existente) que fue hecha en cuotas. Esto actualiza el saldo usado y crea el plan de cuotas.</p>
+    <div class="f2">
+      <div class="fg"><label>Tarjeta</label><select id="crq-tar"></select></div>
+      <div class="fg"><label>Fecha de compra</label><input type="date" id="crq-fecha"></div>
+    </div>
+    <div class="f2">
+      <div class="fg"><label>Monto total de la compra</label><input type="number" id="crq-monto" placeholder="0" inputmode="decimal"></div>
+      <div class="fg"><label>Número de cuotas</label>
+        <select id="crq-cuotas"><option value="1">1 (contado)</option><option value="2">2</option><option value="3">3</option><option value="6">6</option><option value="12">12</option><option value="18">18</option><option value="24">24</option><option value="36">36</option></select>
+      </div>
+    </div>
+    <div class="fg"><label>Descripción</label><input type="text" id="crq-desc" placeholder="Ej: TV Samsung, Viaje a Medellín..."></div>
+    <div class="fg"><label>Categoría</label><select id="crq-cat"></select></div>
+    <!-- Preview del plan -->
+    <div id="crq-preview" style="display:none;background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:6px">Plan de cuotas</div>
+      <div id="crq-preview-content"></div>
+    </div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mcuota-reg')">Cancelar</button><button class="btn btnP" onclick="guardarCuotaReg()">Registrar compra</button></div>
+  </div>
+</div>
+
+<!-- PAGAR TARJETA -->
+<div id="mpagar-tar" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>💸 Registrar pago de tarjeta</h3><button class="mcl" onclick="cerrar('mpagar-tar')">×</button></div>
+    <p style="font-size:12px;color:var(--tx2);margin-bottom:12px;line-height:1.5">Al pagar el extracto, el saldo usado baja. El monto sugerido es el extracto del ciclo actual.</p>
+    <div class="fg"><label>Tarjeta a pagar</label><select id="ptar-tar" onchange="prevPagoTar()"></select></div>
+    <div id="ptar-info" style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px;display:none">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-size:12px;color:var(--tx2)">Saldo total usado</span>
+        <span id="ptar-saldo" style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Rt)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-size:12px;color:var(--tx2)">Cuotas comprometidas próx. mes</span>
+        <span id="ptar-cuotas-prox" style="font-family:var(--mono);font-size:12px;color:var(--At)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:12px;color:var(--tx2)">Pago mínimo</span>
+        <span id="ptar-min" style="font-family:var(--mono);font-size:12px;color:var(--tx2)"></span>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="fg"><label>Monto del pago</label><input type="number" id="ptar-monto" placeholder="0" inputmode="decimal"></div>
+      <div class="fg"><label>Fecha del pago</label><input type="date" id="ptar-fecha"></div>
+    </div>
+    <div class="fg"><label>Cuenta de débito</label><select id="ptar-cta"></select></div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mpagar-tar')">Cancelar</button><button class="btn btnG" onclick="guardarPagoTar()">Registrar pago</button></div>
+  </div>
+</div>
+
 <!-- TARJETA -->
 <div id="mtar" class="mbg">
   <div class="modal">
     <div class="mhdl"></div>
-    <div class="mtt"><h3>Nueva tarjeta</h3><button class="mcl" onclick="cerrar('mtar')">×</button></div>
+    <div class="mtt"><h3 id="mtar-titulo">Nueva tarjeta</h3><button class="mcl" onclick="cerrar('mtar')">×</button></div>
+    <input type="hidden" id="tar-edit-id">
     <div class="f2">
       <div class="fg"><label>Nombre</label><input type="text" id="tarnombre" placeholder="Visa Bancolombia"></div>
       <div class="fg"><label>Banco</label><input type="text" id="tarbanco" placeholder="Bancolombia"></div>
     </div>
     <div class="f2">
-      <div class="fg"><label>Límite</label><input type="number" id="tarlimite" placeholder="0" inputmode="decimal"></div>
+      <div class="fg"><label>Límite de crédito</label><input type="number" id="tarlimite" placeholder="0" inputmode="decimal"></div>
       <div class="fg"><label>Tasa (%)</label><input type="number" id="tartasa" placeholder="24.9" step="0.1"></div>
     </div>
     <div class="f2">
-      <div class="fg"><label>Día de corte</label><input type="number" id="tarcorte" placeholder="5" min="1" max="31"></div>
-      <div class="fg"><label>Día de pago</label><input type="number" id="tarpago" placeholder="20" min="1" max="31"></div>
+      <div class="fg"><label>Día de corte</label><input type="number" id="tarcorte" placeholder="30" min="1" max="31"></div>
+      <div class="fg"><label>Día de pago</label><input type="number" id="tarpago" placeholder="15" min="1" max="31"></div>
     </div>
     <div class="f2">
       <div class="fg"><label>Cuenta débito</label><select id="tarcta"></select></div>
       <div class="fg"><label>Pago mínimo</label><input type="number" id="tarmin" placeholder="0" inputmode="decimal"></div>
     </div>
-    <div class="ma"><button class="btn btnS" onclick="cerrar('mtar')">Cancelar</button><button class="btn btnP" onclick="guardarTarjeta()">Guardar</button></div>
+    <!-- Metas / topes -->
+    <div style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:8px">🎯 Meta de gasto mensual (opcional)</div>
+      <div class="f2">
+        <div class="fg"><label>Tope mensual de gasto</label><input type="number" id="tartope" placeholder="Ej: 500000" inputmode="decimal"></div>
+        <div class="fg"><label>Tope de cuotas activas</label><input type="number" id="tartope-cuotas" placeholder="Ej: 3" min="0" max="36"></div>
+      </div>
+    </div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mtar')">Cancelar</button><button class="btn btnP" onclick="guardarTarjeta()" id="btn-guardar-tar">Guardar</button></div>
   </div>
 </div>
 
@@ -1051,9 +1151,10 @@ function pCtasAhorroProg(elId){
   const lista=_ctas.filter(c=>c.tipo==='ahorro_programado');
   el.innerHTML=lista.map(c=>`<option value="${c.id}">🎯 ${c.nombre} (${fmt(c.saldo_real)})</option>`).join('');
 }
-function pTars(elId){
+function pTars(elId, required=false){
   const el=$(elId); if(!el) return;
-  el.innerHTML='<option value="">No (efectivo/débito)</option>'+_tars.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
+  const prefix=required?'':('<option value="">No (efectivo/débito)</option>');
+  el.innerHTML=prefix+_tars.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
 }
 function pVehs(elId){
   const el=$(elId); if(!el) return;
@@ -1064,15 +1165,17 @@ function pVehs(elId){
 function sTipo(tipo,btn){
   _tipoTx=tipo;
   const clsMap={gasto:'aG',ingreso:'aI',transferencia:'aTR'};
-  document.querySelectorAll('.tto').forEach(b=>{b.className='tto';});
+  // Solo actualizar botones del selector de tipo (primeros 3 .tto del modal TX)
+  document.querySelectorAll('.tts .tto').forEach(b=>{b.className='tto';});
   if(btn) btn.classList.add(clsMap[tipo]||'aG');
-  // Mostrar/ocultar bloques según tipo
-  $('txtar-blk').style.display=tipo==='gasto'?'block':'none';
-  $('tx-catblock').style.display=tipo==='transferencia'?'none':'flex';
-  $('tx-ctadest-blk').style.display=tipo==='transferencia'?'flex':'none';
-  $('lbl-cta-orig').textContent=tipo==='transferencia'?'Cuenta origen':'Cuenta';
+  const isGasto=tipo==='gasto', isTransf=tipo==='transferencia';
+  $('txtar-blk').style.display=isGasto?'block':'none';
+  $('tx-catblock').style.display=isTransf?'none':'flex';
+  $('tx-ctadest-blk').style.display=isTransf?'flex':'none';
   const filtro=tipo==='ingreso'?'ingreso':tipo==='gasto'?'gasto':null;
   pCats('txcat',filtro); cSubcats();
+  if(isGasto){ setUsaTarjeta(false); }
+  else { pCtas('txcta'); pCtas('txctadest'); }
 }
 
 function cSubcats(){
@@ -1083,7 +1186,38 @@ function cSubcats(){
   el.innerHTML='<option value="">Sin subcategoría</option>'+
     subs.map(c=>`<option value="${c.id}">${c.icono||'📌'} ${c.nombre}</option>`).join('');
 }
-function togCuotas(){$('txcuotas-g').style.display=$('txtar')?.value?'flex':'none';}
+function togCuotas(){ prevCuotaTx(); }
+
+function prevCuotaTx(){
+  const monto=Number($('txmonto')?.value)||0;
+  const cuotas=Number($('txcuotas')?.value)||1;
+  const prev=$('tx-cuota-preview'); if(!prev) return;
+  if(monto>0&&cuotas>1) prev.textContent=`${cuotas} cuotas de ${fmt(Math.round(monto/cuotas))} / mes`;
+  else if(monto>0) prev.textContent='Contado';
+  else prev.textContent='';
+}
+
+function setUsaTarjeta(usaTar){
+  const btnNo=$('btn-no-tar'), btnSi=$('btn-si-tar');
+  const debBlk=$('tx-debito-blk'), credBlk=$('tx-credito-blk');
+  if(!btnNo||!btnSi) return;
+  if(usaTar){
+    // CRÉDITO: tarjetas visibles, cuenta oculta
+    btnSi.style.cssText='border-color:var(--AC);background:var(--ACb);color:var(--ACt)';
+    btnNo.style.cssText='';
+    if(debBlk) debBlk.style.display='none';
+    if(credBlk) credBlk.style.display='block';
+    pTars('txtar', true);
+  } else {
+    // DÉBITO: cuenta visible, tarjetas ocultas
+    btnNo.style.cssText='border-color:var(--G);background:var(--Gb);color:var(--Gt)';
+    btnSi.style.cssText='';
+    if(debBlk) debBlk.style.display='block';
+    if(credBlk) credBlk.style.display='none';
+    pCtas('txcta');
+    if($('tx-cuota-preview')) $('tx-cuota-preview').textContent='';
+  }
+}
 
 // ─── VTX tipo ──────────────────────────────────────────────
 function sVTipo(tipo,btn){
@@ -1096,12 +1230,17 @@ function sVTipo(tipo,btn){
 // ─── Abrir modales ─────────────────────────────────────────
 function abrirTx(){
   $('txfecha').value=HOY.toISOString().slice(0,10); _tipoTx='gasto';
-  document.querySelectorAll('.tto').forEach((b,i)=>{b.className='tto'+(i===0?' aG':'');});
-  pCats('txcat','gasto'); cSubcats(); pCtas('txcta'); pTars('txtar'); pCtas('txctadest');
-  $('txtar-blk').style.display='block'; $('txcuotas-g').style.display='none';
-  $('tx-catblock').style.display='flex'; $('tx-ctadest-blk').style.display='none';
-  $('lbl-cta-orig').textContent='Cuenta';
+  // Reset tipo buttons — solo los del .tts (primeros 3)
+  document.querySelectorAll('.tts .tto').forEach((b,i)=>{b.className='tto'+(i===0?' aG':'');});
+  pCats('txcat','gasto'); cSubcats();
+  pCtas('txctadest');
+  $('tx-catblock').style.display='flex';
+  $('tx-ctadest-blk').style.display='none';
+  $('txtar-blk').style.display='block';
+  setUsaTarjeta(false); // siempre empieza en débito
   ['txmonto','txdesc','txnota'].forEach(id=>$(id).value='');
+  if($('txcuotas')) $('txcuotas').value='1';
+  if($('tx-cuota-preview')) $('tx-cuota-preview').textContent='';
   $('mtx').classList.add('on');
 }
 
@@ -1119,7 +1258,7 @@ function prevTrf(){
 }
 
 function abrirPres(){pCats('pcat','gasto');$('mpres').classList.add('on');}
-function abrirTarjeta(){pCtas('tarcta','Sin cuenta');$('mtar').classList.add('on');}
+function _abrirTarjetaOld(){/* reemplazada por la nueva versión abajo */}
 function abrirPrestamo(){pCtas('prect','Sin cuenta');$('preinicio').value=HOY.toISOString().slice(0,10);$('mpre').classList.add('on');}
 function abrirAhorro(){pCtas('ahocta');$('ahoinicio').value=HOY.toISOString().slice(0,10);$('maho').classList.add('on');}
 function abrirVehiculo(){$('mveh').classList.add('on');}
@@ -1209,6 +1348,7 @@ function quitarParte(i){_mantPartes.splice(i,1);renderMantPartes();}
 // ════════════ DASHBOARD ════════════
 async function cDash(){
   const {mes,anio}=gMS('dm','da');
+  $('abn').innerHTML=''; // limpiar alertas inmediatamente al cambiar mes
   $('dstats').innerHTML=`<div class="loading" style="grid-column:1/-1"><span class="sp"></span>Cargando...</div>`;
   const [dash,alertas]=await Promise.all([api({accion:'getDashboard',mes,anio}),api({accion:'getAlertas',mes,anio})]);
   if(!dash) return;
@@ -1222,12 +1362,12 @@ async function cDash(){
   $('abn').innerHTML=(alertas?.alertas||[]).slice(0,4).map(a=>`<div class="alp ${a.tipo}">${a.mensaje}</div>`).join('');
 
   const b = dash.balance;
-  // Saldo disponible = solo cuentas líquidas
+  // Saldo disponible = solo cuentas líquidas (histórico, no depende del mes)
   const totalDisp = ctasLiq.reduce((s,c)=>s+Number(c.saldo_real),0);
   $('dstats').innerHTML=`
     <div class="sc G"><div class="sl">Ingresos del mes</div><div class="sv G">${fmt(dash.total_ingresos)}</div></div>
     <div class="sc R"><div class="sl">Gastos del mes</div><div class="sv R">${fmt(dash.total_gastos)}</div></div>
-    <div class="sc ${b>=0?'G':'R'}"><div class="sl">Balance del mes</div><div class="sv ${b>=0?'G':'R'}">${fmt(b)}</div><div class="ss">${dash.num_transacciones} movimientos</div></div>
+    <div class="sc ${b>=0?'G':'R'}"><div class="sl">Balance (ing - gas)</div><div class="sv ${b>=0?'G':'R'}">${fmt(b)}</div><div class="ss">${dash.num_transacciones} movimientos · transf. no afectan</div></div>
     <div class="sc R"><div class="sl">Total deuda</div><div class="sv R">${fmt(dash.total_deuda)}</div></div>
     <div class="sc B"><div class="sl">Saldo disponible</div><div class="sv B">${fmt(totalDisp)}</div><div class="ss">sin ahorro programado</div></div>`;
 
@@ -1271,7 +1411,7 @@ function rTxList(cid,txs,showDel=false){
     const sub=_cats.find(c=>c.id===t.subcategoria_id);
     const ctaO=_ctas.find(c=>c.id===t.cuenta_origen_id)||{};
     const ctaD=_ctas.find(c=>c.id===t.cuenta_destino_id)||{};
-    const signo=t.tipo==='ingreso'?'+':t.tipo==='gasto'?'-':'↔';
+    const signo=t.tipo==='ingreso'?'+':t.tipo==='gasto'?'-':'';
     const cuotas=Number(t.cuotas)>1?` <span class="bd_ bAC" style="font-size:10px">${t.cuota_actual}/${t.cuotas}</span>`:'';
     const subLabel=sub?` · ${sub.icono}${sub.nombre}`:'';
     const ctaLabel=t.tipo==='transferencia'?`${ctaO.nombre||'—'} → ${ctaD.nombre||'—'}`:ctaO.nombre||'—';
@@ -1302,7 +1442,7 @@ function setPTab(tab){
     $(`ptab-${t}`).className='btn btn-sm '+(t===tab?'btnP':'btnS');
   });
   if(tab==='ing'&&!_ingData) cIngMes();
-  if(tab==='graf') renderPresChart();
+  if(tab==='graf') setTimeout(renderPresChart, 50);
 }
 
 function cPresSubcats(){
@@ -1416,6 +1556,8 @@ async function cIngMes(){
 }
 
 function renderPresChart(){
+  // Esperar un frame para que el panel sea visible y tenga dimensiones
+  requestAnimationFrame(()=>{
   const canvas=$('pres-chart');
   if(!canvas||!_pres.length) return;
   const{mes,anio}=gMS('pm','pa');
@@ -1424,12 +1566,14 @@ function renderPresChart(){
   const diaActual=(hoy.getMonth()+1===mes&&hoy.getFullYear()===anio)?hoy.getDate():diasEnMes;
   const dias=Array.from({length:diasEnMes},(_,i)=>i+1);
 
-  // Top 5 presupuestos por monto
   const top=[..._pres].sort((a,b)=>Number(b.monto_presupuestado)-Number(a.monto_presupuestado)).slice(0,5);
   const COLORS=['#6366f1','#22c55e','#ef4444','#f59e0b','#3b82f6'];
 
-  const W=canvas.offsetWidth||300, H=240;
+  // Forzar dimensiones reales del contenedor padre
+  const parent=canvas.parentElement;
+  const W=Math.max(parent?.clientWidth||400,300); const H=240;
   canvas.width=W; canvas.height=H;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,W,H);
 
@@ -1509,6 +1653,7 @@ function renderPresChart(){
       <div style="width:12px;height:3px;background:${COLORS[i]};border-radius:2px;flex-shrink:0"></div>
       ${p.icono_mostrar} ${p.nombre_mostrar}
     </div>`).join('');
+  }); // end requestAnimationFrame
 }
 
 function abrirPres(){
@@ -1579,26 +1724,219 @@ function fmtK(n){
 }
 
 // ════════════ TARJETAS ════════════
+async function diagTarjetas(){
+  const data=await api({accion:'diagnosticoTarjetas'});
+  if(!data) return;
+  const msg=data.filas?.map(f=>
+    `${f.nombre}: saldo_usado=${f.saldo_usado} | limite=${f.limite} | tope_gasto=${f.tope_gasto} | tope_cuotas=${f.tope_cuotas}`
+  ).join('\n');
+  alert('Datos raw del Sheet:\n\n'+(msg||JSON.stringify(data,null,2)));
+}
+
 async function cTarjetas(){
   const data=await api({accion:'getTarjetas'}); _tars=data||[];
   if(!_tars.length){$('tarlista').innerHTML=`<div class="empty"><div class="ei">💳</div><p>Sin tarjetas.</p></div>`;return;}
   $('tarlista').innerHTML=_tars.map(t=>{
-    const pct=Math.min(t.uso_pct,100),est=t.uso_pct>=90?'danger':t.uso_pct>=70?'warning':'ok';
+    const pct=Math.min(t.uso_pct,100);
+    const estUso=t.uso_pct>=90?'danger':t.uso_pct>=70?'warning':'ok';
+    const tope=Number(t.tope_gasto)||0;
+    const topePct=tope>0?Math.min(Math.round((Number(t.saldo_usado)/tope)*100),120):0;
+    const estTope=topePct>=100?'danger':topePct>=80?'warning':'ok';
+    const topeCuotas=Number(t.tope_cuotas)||0;
+    const cuotasActivas=Number(t.num_cuotas_activas)||0;
+    const gastoCiclo=Number(t.gasto_ciclo)||0;
+    const inicioCiclo=t.inicio_ciclo||'—';
+
     return`<div class="ic">
-      <div class="ih"><div><div class="it">💳 ${t.nombre}</div><div class="is">${t.banco}</div></div>
-        <div class="ia"><div class="m" style="color:var(--Rt)">${fmt(t.saldo_usado)}</div><div class="s">de ${fmt(t.limite)}</div></div></div>
-      <div class="pw"><div class="pb ${est}" style="width:${pct}%"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3);margin-top:2px;margin-bottom:7px">
-        <span>Usado: <strong style="color:var(--tx2)">${t.uso_pct}%</strong></span>
+      <div class="ih">
+        <div>
+          <div class="it">💳 ${t.nombre}</div>
+          <div class="is">${t.banco} · corte día ${t.fecha_corte} · pago día ${t.fecha_pago}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-start">
+          <button class="btn btnS btn-sm" onclick="editarTarjeta('${t.id}')">✏️</button>
+          <div class="ia">
+            <div class="m" style="color:var(--Rt)">${fmt(t.saldo_usado)}</div>
+            <div class="s">saldo total usado</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de uso del límite -->
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:2px">Uso del límite: ${t.uso_pct}%</div>
+      <div class="pw"><div class="pb ${estUso}" style="width:${pct}%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3);margin-bottom:10px">
+        <span>Usado: <strong style="color:var(--tx2)">${fmt(t.saldo_usado)}</strong></span>
         <span>Disponible: <strong style="color:var(--Gt)">${fmt(Number(t.limite)-Number(t.saldo_usado))}</strong></span>
       </div>
-      <div class="idet"><div>Corte<strong>Día ${t.fecha_corte}</strong></div><div>Pago<strong>Día ${t.fecha_pago}</strong></div><div>Cuotas mes<strong>${fmt(t.cuotas_mes_actual)}</strong></div><div>Tasa<strong>${t.tasa_interes}%</strong></div></div>
+
+      ${tope>0?`
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:2px">Meta mensual: ${topePct}% de ${fmt(tope)}</div>
+      <div class="pw"><div class="pb ${estTope}" style="width:${Math.min(topePct,100)}%"></div></div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">${topePct>=100?'⛔ Superaste tu meta mensual':'Quedan '+fmt(tope-Number(t.saldo_usado))}</div>`:''}
+
+      <!-- Resumen del ciclo actual -->
+      <div style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:8px">📋 Ciclo actual · desde ${inicioCiclo}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--tx3)">Gastado en ciclo${t.gasto_ciclo_estimado?'<span style="color:var(--At)"> *</span>':''}</div>
+            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Rt)">${fmt(gastoCiclo)}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--tx3)">Cuotas activas</div>
+            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--At)">${cuotasActivas}${topeCuotas>0?' / máx '+topeCuotas:''}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--tx3)">Cuota mensual</div>
+            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Bt)">${fmt(t.cuotas_mes_actual)}</div>
+          </div>
+        </div>
+      </div>
+      ${t.gasto_ciclo_estimado?`<div style="font-size:10px;color:var(--At);padding:4px 0">* Estimado desde saldo total. Registra compras para ver el detalle real por ciclo.</div>`:''}
+
+      <div style="display:flex;gap:7px">
+        <button class="btn btnO btn-sm" style="flex:1" onclick="abrirRegistrarCuotaParaTar('${t.id}')">+ Registrar compra</button>
+        <button class="btn btnG btn-sm" style="flex:1" onclick="abrirPagarTar('${t.id}')">💸 Registrar pago</button>
+      </div>
     </div>`;
   }).join('');
 }
+
+function abrirRegistrarCuota(){
+  pTars('crq-tar', true); pCats('crq-cat','gasto');
+  $('crq-fecha').value=HOY.toISOString().slice(0,10);
+  ['crq-monto','crq-desc'].forEach(id=>$(id).value='');
+  $('crq-cuotas').value='1';
+  $('crq-preview').style.display='none';
+  $('mcuota-reg').classList.add('on');
+}
+function abrirRegistrarCuotaParaTar(tarId){
+  abrirRegistrarCuota();
+  if($('crq-tar')) $('crq-tar').value=tarId;
+}
+// Preview del plan de cuotas
+$('crq-monto')?.addEventListener?.('input', prevCuota);
+document.addEventListener('DOMContentLoaded',()=>{
+  $('crq-monto')?.addEventListener('input', prevCuota);
+  $('crq-cuotas')?.addEventListener('change', prevCuota);
+});
+function prevCuota(){
+  const monto=Number($('crq-monto')?.value)||0;
+  const cuotas=Number($('crq-cuotas')?.value)||1;
+  if(!monto||cuotas<1){$('crq-preview').style.display='none';return;}
+  const cuotaVal=Math.round(monto/cuotas);
+  const fechaBase=new Date($('crq-fecha')?.value||HOY);
+  let html='';
+  for(let i=0;i<Math.min(cuotas,6);i++){
+    const mes=new Date(fechaBase.getFullYear(),fechaBase.getMonth()+i,1);
+    html+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--bd)">
+      <span style="color:var(--tx2)">Cuota ${i+1} / ${cuotas} — ${MESES[mes.getMonth()].slice(0,3)} ${mes.getFullYear()}</span>
+      <span style="font-family:var(--mono);color:var(--Rt)">${fmt(cuotaVal)}</span>
+    </div>`;
+  }
+  if(cuotas>6) html+=`<div style="font-size:11px;color:var(--tx3);padding-top:4px">... y ${cuotas-6} cuotas más</div>`;
+  $('crq-preview-content').innerHTML=html;
+  $('crq-preview').style.display='block';
+}
+async function guardarCuotaReg(){
+  const monto=Number($('crq-monto').value);
+  if(!monto||monto<=0){toast('Ingresa el monto');return;}
+  const tarId=$('crq-tar').value; if(!tarId){toast('Selecciona la tarjeta');return;}
+  // Registrar como transacción con tarjeta
+  const r=await apiPost({accion:'insertTransaccion',tipo:'gasto',
+    fecha:$('crq-fecha').value,monto,cuenta_origen_id:'',
+    categoria_id:$('crq-cat').value,
+    descripcion:$('crq-desc').value||'Compra en tarjeta',
+    tarjeta_id:tarId,cuotas:Number($('crq-cuotas').value)});
+  if(r?.ok){toast('✅ Compra registrada — cuotas creadas');cerrar('mcuota-reg');cTarjetas();}
+  else toast('❌ '+(r?.error||'Error'));
+}
+
+// Pagar tarjeta
+function abrirPagarTar(tarId=''){
+  pTars('ptar-tar', true); pCtas('ptar-cta');
+  $('ptar-fecha').value=HOY.toISOString().slice(0,10);
+  $('ptar-monto').value='';
+  if(tarId) $('ptar-tar').value=tarId;
+  prevPagoTar();
+  $('mpagar-tar').classList.add('on');
+}
+function prevPagoTar(){
+  const tarId=$('ptar-tar')?.value;
+  const t=_tars.find(x=>x.id===tarId);
+  const info=$('ptar-info');
+  if(!t){if(info)info.style.display='none';return;}
+  if(info){
+    $('ptar-saldo').textContent=fmt(t.saldo_usado);
+    $('ptar-cuotas-prox').textContent=fmt(t.cuotas_mes_actual);
+    $('ptar-min').textContent=fmt(t.pago_minimo);
+    info.style.display='block';
+    // Pre-llenar con el monto del extracto del ciclo si está vacío
+    if(!$('ptar-monto').value) $('ptar-monto').value=t.gasto_ciclo||t.saldo_usado||'';
+  }
+}
+async function guardarPagoTar(){
+  const monto=Number($('ptar-monto').value);
+  const tarId=$('ptar-tar').value;
+  const ctaId=$('ptar-cta').value;
+  if(!monto||monto<=0){toast('Ingresa el monto del pago');return;}
+  if(!tarId){toast('Selecciona la tarjeta');return;}
+  if(!ctaId){toast('Selecciona la cuenta de débito');return;}
+  // 1. Registrar como gasto de la cuenta (sale dinero)
+  const r1=await apiPost({accion:'insertTransaccion',tipo:'gasto',
+    fecha:$('ptar-fecha').value,monto,cuenta_origen_id:ctaId,
+    categoria_id:'CAT016',descripcion:`Pago tarjeta ${_tars.find(t=>t.id===tarId)?.nombre||''}`});
+  if(!r1?.ok){toast('❌ Error al registrar');return;}
+  // 2. Bajar el saldo_usado de la tarjeta
+  const t=_tars.find(x=>x.id===tarId);
+  const nuevoSaldo=Math.max(0,Number(t?.saldo_usado||0)-monto);
+  const r2=await apiPost({accion:'updateTarjeta',id:tarId,saldo_usado:nuevoSaldo});
+  if(!r2?.ok){toast('❌ Error al actualizar saldo');return;}
+  toast('✅ Pago registrado — saldo actualizado');
+  cerrar('mpagar-tar'); cTarjetas(); cDash();
+}
+
+function abrirTarjeta(){
+  $('tar-edit-id').value='';
+  $('mtar-titulo').textContent='Nueva tarjeta';
+  $('btn-guardar-tar').textContent='Guardar';
+  ['tarnombre','tarbanco','tartasa','tarcorte','tarpago','tarmin','tartope','tartope-cuotas','tarlimite'].forEach(id=>{if($(id))$(id).value='';});
+  pCtas('tarcta','Sin cuenta');
+  $('mtar').classList.add('on');
+}
+
+function editarTarjeta(id){
+  const t=_tars.find(x=>x.id===id); if(!t) return;
+  $('tar-edit-id').value=id;
+  $('mtar-titulo').textContent='Editar tarjeta';
+  $('btn-guardar-tar').textContent='Actualizar';
+  $('tarnombre').value=t.nombre||'';
+  $('tarbanco').value=t.banco||'';
+  $('tarlimite').value=t.limite||'';
+  $('tartasa').value=t.tasa_interes||'';
+  $('tarcorte').value=t.fecha_corte||'';
+  $('tarpago').value=t.fecha_pago||'';
+  $('tarmin').value=t.pago_minimo||'';
+  $('tartope').value=t.tope_gasto||'';
+  $('tartope-cuotas').value=t.tope_cuotas||'';
+  pCtas('tarcta','Sin cuenta');
+  if(t.cuenta_id) $('tarcta').value=t.cuenta_id;
+  $('mtar').classList.add('on');
+}
+
 async function guardarTarjeta(){
-  const r=await apiPost({accion:'insertTarjeta',nombre:$('tarnombre').value,banco:$('tarbanco').value,limite:Number($('tarlimite').value),tasa_interes:Number($('tartasa').value),fecha_corte:$('tarcorte').value,fecha_pago:$('tarpago').value,pago_minimo:Number($('tarmin').value),cuenta_id:$('tarcta').value});
-  if(r?.ok){toast('✅ Guardada');cerrar('mtar');cTarjetas();} else toast('❌ '+(r?.error||'Error'));
+  const editId=$('tar-edit-id').value;
+  const body={nombre:$('tarnombre').value,banco:$('tarbanco').value,
+    limite:Number($('tarlimite').value),tasa_interes:Number($('tartasa').value),
+    fecha_corte:$('tarcorte').value,fecha_pago:$('tarpago').value,
+    pago_minimo:Number($('tarmin').value),cuenta_id:$('tarcta').value,
+    tope_gasto:Number($('tartope').value)||0,
+    tope_cuotas:Number($('tartope-cuotas').value)||0};
+  let r;
+  if(editId) r=await apiPost({accion:'updateTarjeta',id:editId,...body});
+  else r=await apiPost({accion:'insertTarjeta',...body});
+  if(r?.ok){toast(editId?'✅ Actualizada':'✅ Guardada');cerrar('mtar');cTarjetas();} else toast('❌ '+(r?.error||'Error'));
 }
 
 // ════════════ PRÉSTAMOS ════════════
@@ -2042,7 +2380,7 @@ async function guardarTx(){
   const monto=Number($('txmonto').value);
   if(!monto||monto<=0){toast('Ingresa un monto válido');return;}
 
-  // Si es transferencia, usar el endpoint correcto para evitar duplicados
+  // TRANSFERENCIA
   if(_tipoTx==='transferencia'){
     const dest=$('txctadest').value;
     const ori=$('txcta').value;
@@ -2052,20 +2390,53 @@ async function guardarTx(){
       cuenta_destino_id:dest,monto,fecha:$('txfecha').value,
       descripcion:$('txdesc').value||'Transferencia entre cuentas'});
     if(r?.ok){toast('✅ Transferencia registrada');cerrar('mtx');['txmonto','txdesc','txnota'].forEach(id=>$(id).value='');
-      cDash(); if(_activePg==='transacciones') cTxs();
-    } else toast('❌ '+(r?.error||'Error'));
+      cDash(); if(_activePg==='transacciones') cTxs();}
+    else toast('❌ '+(r?.error||'Error'));
     return;
   }
 
-  const body={tipo:_tipoTx,fecha:$('txfecha').value,monto,
-    cuenta_origen_id:$('txcta').value,
-    categoria_id:$('txcat')?.value||'',subcategoria_id:$('txsub')?.value||'',
-    descripcion:$('txdesc').value,nota:$('txnota').value,
-    tarjeta_id:$('txtar')?.value||'',cuotas:Number($('txcuotas')?.value)||1};
-  body.accion='insertTransaccion';
+  // Determinar si es crédito o débito
+  const usandoTarjeta = $('tx-credito-blk')?.style.display!=='none' && _tipoTx==='gasto';
+  const tarjetaId = usandoTarjeta ? ($('txtar')?.value||'') : '';
+  const cuotas = usandoTarjeta ? (Number($('txcuotas')?.value)||1) : 1;
+
+  // Cuenta origen: solo si es débito (para crédito no se resta nada de cuenta)
+  const ctaOrigen = usandoTarjeta ? '' : ($('txcta')?.value||'');
+  // Para ingresos siempre usar cuenta seleccionada
+  const ctaFinal = _tipoTx==='ingreso' ? ($('txcta')?.value||'') : ctaOrigen;
+
+  if(_tipoTx==='gasto'&&!usandoTarjeta&&!ctaOrigen){
+    toast('Selecciona la cuenta de débito');return;
+  }
+  if(usandoTarjeta&&!tarjetaId){
+    toast('Selecciona la tarjeta de crédito');return;
+  }
+
+  const body={
+    accion:'insertTransaccion',
+    tipo:_tipoTx,
+    fecha:$('txfecha').value,
+    monto,
+    cuenta_origen_id:ctaFinal,
+    cuenta_destino_id:'',
+    categoria_id:$('txcat')?.value||'',
+    subcategoria_id:$('txsub')?.value||'',
+    descripcion:$('txdesc').value,
+    nota:$('txnota').value,
+    tarjeta_id:tarjetaId,
+    cuotas,
+  };
+
   const r=await apiPost(body);
-  if(r?.ok){toast('✅ Guardado');cerrar('mtx');['txmonto','txdesc','txnota'].forEach(id=>$(id).value='');
-    cDash(); if(_activePg==='transacciones') cTxs(); if(_activePg==='presupuestos') cPres();
+  if(r?.ok){
+    toast('✅ Guardado'+(cuotas>1?` — ${cuotas} cuotas de ${fmt(Math.round(monto/cuotas))}` :''));
+    cerrar('mtx');
+    ['txmonto','txdesc','txnota'].forEach(id=>$(id).value='');
+    if($('txcuotas')) $('txcuotas').value='1';
+    cDash();
+    if(_activePg==='transacciones') cTxs();
+    if(_activePg==='presupuestos') cPres();
+    if(_activePg==='tarjetas') cTarjetas();
   } else toast('❌ '+(r?.error||'Error'));
 }
 
@@ -2090,6 +2461,11 @@ async function inicializar(){
   startAutoRefresh();
 }
 inicializar();
+
+// Preview cuotas en tiempo real
+document.addEventListener('input', e=>{
+  if(e.target.id==='txmonto'||e.target.id==='txcuotas') prevCuotaTx();
+});
 </script>
 </body>
 </html>
