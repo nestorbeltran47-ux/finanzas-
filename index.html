@@ -414,6 +414,8 @@ select option{background:var(--sf2)}
     <h1>Tarjetas</h1>
     <div class="phr">
       <button class="btn btnS btn-sm" onclick="diagTarjetas()" title="Ver datos raw del Sheet">🔍</button>
+      <button class="btn btnS btn-sm" onclick="abrirGestionCuotas()">📋 Cuotas</button>
+      <button class="btn btnO btn-sm" onclick="abrirAvance()">💵 Avance</button>
       <button class="btn btnS btn-sm" onclick="abrirRegistrarCuota()">+ Registrar compra</button>
       <button class="btn btnP btn-sm" onclick="abrirTarjeta()">+ Agregar tarjeta</button>
     </div>
@@ -551,7 +553,13 @@ select option{background:var(--sf2)}
     </div>
     <div class="fg"><label>Descripción</label><input type="text" id="txdesc" placeholder="Ej: Mercado semanal"></div>
 
-    <!-- FORMA DE PAGO: primero débito o crédito -->
+    <!-- CUENTA INGRESO: visible solo para ingresos -->
+    <div class="fg" id="tx-ingreso-cta-blk" style="display:none">
+      <label>Cuenta destino (¿dónde entra el dinero?)</label>
+      <select id="txcta-ing"></select>
+    </div>
+
+    <!-- FORMA DE PAGO: visible solo para gastos -->
     <div id="txtar-blk" style="display:none">
       <label style="font-size:11px;color:var(--tx2);font-weight:500;display:block;margin-bottom:6px">Forma de pago</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -636,27 +644,107 @@ select option{background:var(--sf2)}
   </div>
 </div>
 
+<!-- AVANCE DE TARJETA -->
+<div id="mavance" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>💵 Avance de tarjeta</h3><button class="mcl" onclick="cerrar('mavance')">×</button></div>
+    <p style="font-size:12px;color:var(--tx2);margin-bottom:12px;line-height:1.5">
+      Toma dinero del cupo y lo deposita en tu cuenta débito.
+      <strong style="color:var(--At)">Menos de $60.000 → 1 cuota · $60.000 o más → 36 cuotas.</strong>
+    </p>
+    <div class="f2">
+      <div class="fg"><label>Tarjeta origen</label><select id="av-tar" onchange="prevAvance()"></select></div>
+      <div class="fg"><label>Cuenta destino (débito)</label><select id="av-cta" onchange="prevAvance()"></select></div>
+    </div>
+    <div class="f2">
+      <div class="fg"><label>Monto del avance</label>
+        <input type="number" id="av-monto" placeholder="0" inputmode="decimal" oninput="prevAvance()">
+      </div>
+      <div class="fg"><label>Costo del avance</label>
+        <input type="number" id="av-costo" placeholder="0" inputmode="decimal" oninput="prevAvance()">
+        <div style="font-size:10px;color:var(--tx3);margin-top:3px">Comisión cobrada por el banco</div>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="fg"><label>Cuotas <span id="av-cuotas-hint" style="font-size:10px;color:var(--At)"></span></label>
+        <input type="number" id="av-cuotas" value="1" min="1" max="36" inputmode="numeric" oninput="prevAvance()">
+      </div>
+      <div class="fg"><label>Fecha</label><input type="date" id="av-fecha"></div>
+    </div>
+    <div id="av-preview" style="display:none;background:var(--sf2);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
+      <div id="av-resumen" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--bd);margin-bottom:8px"></div>
+      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:6px">📅 Plan de pagos</div>
+      <div id="av-plan"></div>
+    </div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mavance')">Cancelar</button><button class="btn btnO" onclick="guardarAvance()">Confirmar avance</button></div>
+  </div>
+</div>
+
+<!-- GESTIONAR CUOTAS EXISTENTES -->
+<div id="mgestion-cuotas" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>📋 Gestionar cuotas</h3><button class="mcl" onclick="cerrar('mgestion-cuotas')">×</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <select id="gc-tar-filter" onchange="cargarCuotasGestion()" style="flex:1;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--rsm);color:var(--tx1)">
+        <option value="">Todas las tarjetas</option>
+      </select>
+      <select id="gc-estado-filter" onchange="cargarCuotasGestion()" style="flex:1;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--rsm);color:var(--tx1)">
+        <option value="activo">Activas</option>
+        <option value="pagado">Pagadas</option>
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div id="gc-lista" style="max-height:55vh;overflow-y:auto"></div>
+    <div id="gc-edit-blk" style="display:none;background:var(--Bb);border-radius:var(--rsm);padding:12px;margin-top:10px;border:1px solid var(--Bt)">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--Bt)">✏️ Editando: <span id="gc-edit-desc"></span></div>
+      <input type="hidden" id="gc-edit-id">
+      <div class="f2">
+        <div class="fg"><label>Cuotas pagadas</label><input type="number" id="gc-edit-pagadas" min="0"></div>
+        <div class="fg"><label>Total cuotas</label><input type="number" id="gc-edit-total" min="1"></div>
+      </div>
+      <div class="f2">
+        <div class="fg"><label>Valor cuota/mes</label><input type="number" id="gc-edit-valor" min="0"></div>
+        <div class="fg"><label>Estado</label>
+          <select id="gc-edit-estado" style="width:100%;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--rsm);color:var(--tx1)">
+            <option value="activo">Activo</option>
+            <option value="pagado">Pagado</option>
+          </select>
+        </div>
+      </div>
+      <div class="ma" style="margin-top:8px">
+        <button class="btn btnS btn-sm" onclick="$('gc-edit-blk').style.display='none'">Cancelar</button>
+        <button class="btn btnP btn-sm" onclick="guardarEdicionCuota()">Guardar</button>
+      </div>
+    </div>
+    <div class="ma" style="margin-top:10px"><button class="btn btnS" onclick="cerrar('mgestion-cuotas')">Cerrar</button></div>
+  </div>
+</div>
+
 <!-- REGISTRAR COMPRA CON CUOTAS EN TARJETA -->
 <div id="mcuota-reg" class="mbg">
   <div class="modal">
     <div class="mhdl"></div>
     <div class="mtt"><h3>💳 Registrar compra en tarjeta</h3><button class="mcl" onclick="cerrar('mcuota-reg')">×</button></div>
-    <p style="font-size:12px;color:var(--tx2);margin-bottom:12px;line-height:1.5">Registra una compra (nueva o existente) que fue hecha en cuotas. Esto actualiza el saldo usado y crea el plan de cuotas.</p>
     <div class="f2">
-      <div class="fg"><label>Tarjeta</label><select id="crq-tar"></select></div>
-      <div class="fg"><label>Fecha de compra</label><input type="date" id="crq-fecha"></div>
+      <div class="fg"><label>Tarjeta</label><select id="crq-tar" onchange="prevCuota()"></select></div>
+      <div class="fg"><label>Fecha de compra</label><input type="date" id="crq-fecha" oninput="prevCuota()"></div>
     </div>
     <div class="f2">
-      <div class="fg"><label>Monto total de la compra</label><input type="number" id="crq-monto" placeholder="0" inputmode="decimal"></div>
+      <div class="fg"><label>Monto total de la compra</label><input type="number" id="crq-monto" placeholder="0" inputmode="decimal" oninput="prevCuota()"></div>
       <div class="fg"><label>Número de cuotas</label>
-        <select id="crq-cuotas"><option value="1">1 (contado)</option><option value="2">2</option><option value="3">3</option><option value="6">6</option><option value="12">12</option><option value="18">18</option><option value="24">24</option><option value="36">36</option></select>
+        <input type="number" id="crq-cuotas" value="1" min="1" max="60" inputmode="numeric" placeholder="1" oninput="prevCuota()" style="width:100%">
       </div>
     </div>
     <div class="fg"><label>Descripción</label><input type="text" id="crq-desc" placeholder="Ej: TV Samsung, Viaje a Medellín..."></div>
     <div class="fg"><label>Categoría</label><select id="crq-cat"></select></div>
     <!-- Preview del plan -->
-    <div id="crq-preview" style="display:none;background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:6px">Plan de cuotas</div>
+    <div id="crq-preview" style="display:none;background:var(--sf2);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
+      <!-- Resumen financiero -->
+      <div id="crq-resumen" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bd)"></div>
+      <!-- Lista de cuotas -->
+      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:6px">📅 Plan de pagos</div>
       <div id="crq-preview-content"></div>
     </div>
     <div class="ma"><button class="btn btnS" onclick="cerrar('mcuota-reg')">Cancelar</button><button class="btn btnP" onclick="guardarCuotaReg()">Registrar compra</button></div>
@@ -705,7 +793,7 @@ select option{background:var(--sf2)}
     </div>
     <div class="f2">
       <div class="fg"><label>Límite de crédito</label><input type="number" id="tarlimite" placeholder="0" inputmode="decimal"></div>
-      <div class="fg"><label>Tasa (%)</label><input type="number" id="tartasa" placeholder="24.9" step="0.1"></div>
+      <div class="fg"><label>Tasa E.A. (%)</label><input type="number" id="tartasa" placeholder="28.17" step="0.01" oninput="recalcularCuotas()"></div>
     </div>
     <div class="f2">
       <div class="fg"><label>Día de corte</label><input type="number" id="tarcorte" placeholder="30" min="1" max="31"></div>
@@ -717,13 +805,70 @@ select option{background:var(--sf2)}
     </div>
     <!-- Metas / topes -->
     <div style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:8px">🎯 Meta de gasto mensual (opcional)</div>
+      <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:8px">🎯 Meta de gasto mensual (dejar en 0 para sin límite)</div>
       <div class="f2">
-        <div class="fg"><label>Tope mensual de gasto</label><input type="number" id="tartope" placeholder="Ej: 500000" inputmode="decimal"></div>
-        <div class="fg"><label>Tope de cuotas activas</label><input type="number" id="tartope-cuotas" placeholder="Ej: 3" min="0" max="36"></div>
+        <div class="fg"><label>Tope mensual de gasto</label><input type="number" id="tartope" placeholder="0 = sin límite" inputmode="decimal"></div>
+        <div class="fg"><label>Tope de cuotas activas</label><input type="number" id="tartope-cuotas" placeholder="0 = sin límite" min="0" max="60"></div>
       </div>
     </div>
+    <!-- Recálculo de cuotas por tasa -->
+    <div id="tar-recalculo" style="display:none;background:var(--Bb);border-radius:var(--rsm);padding:10px;margin-bottom:10px;font-size:12px">
+      <div style="font-weight:500;color:var(--Bt);margin-bottom:4px">🔄 Recálculo por cambio de tasa</div>
+      <div id="tar-recalculo-txt" style="color:var(--tx2);line-height:1.6"></div>
+      <button class="btn btnP btn-sm" style="margin-top:8px" onclick="aplicarRecalculo()">Aplicar recálculo</button>
+    </div>
     <div class="ma"><button class="btn btnS" onclick="cerrar('mtar')">Cancelar</button><button class="btn btnP" onclick="guardarTarjeta()" id="btn-guardar-tar">Guardar</button></div>
+  </div>
+</div>
+
+<!-- PAGAR PRÉSTAMO -->
+<div id="mpagar-pre" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>💸 Pagar cuota de préstamo</h3><button class="mcl" onclick="cerrar('mpagar-pre')">×</button></div>
+
+    <!-- Info del préstamo -->
+    <div id="ppre-info" style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:12px;display:none">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--tx2)">Saldo restante</span>
+        <span id="ppre-restante" style="font-family:var(--mono);font-size:14px;font-weight:600;color:var(--Rt)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--tx2)">Cuota mensual</span>
+        <span id="ppre-cuota" style="font-family:var(--mono);font-size:13px;color:var(--Bt)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:12px;color:var(--tx2)">% pagado</span>
+        <span id="ppre-pct" style="font-family:var(--mono);font-size:12px;color:var(--Gt)"></span>
+      </div>
+      <div class="pw" style="margin-top:6px"><div class="pb ok" id="ppre-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="fg"><label>Préstamo</label><select id="ppre-sel" onchange="prevPagoPre()"></select></div>
+    <div class="f2">
+      <div class="fg"><label>Monto del pago</label><input type="number" id="ppre-monto" placeholder="0" inputmode="decimal" oninput="prevPagoPre()"></div>
+      <div class="fg"><label>Fecha</label><input type="date" id="ppre-fecha"></div>
+    </div>
+    <div class="fg"><label>Cuenta de débito</label><select id="ppre-cta"></select></div>
+    <div class="fg"><label>Nota (opcional)</label><input type="text" id="ppre-nota" placeholder="Ej: Cuota mayo 2026"></div>
+
+    <!-- Preview después del pago -->
+    <div id="ppre-prev" style="background:var(--Gb);border-radius:var(--rsm);padding:10px;margin-bottom:10px;display:none">
+      <div style="font-size:11px;font-weight:500;color:var(--Gt);margin-bottom:5px">Después del pago</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:12px;color:var(--tx2)">Nuevo saldo restante</span>
+        <span id="ppre-nuevo-saldo" style="font-family:var(--mono);font-size:13px;font-weight:600"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:12px;color:var(--tx2)">Nuevo % pagado</span>
+        <span id="ppre-nuevo-pct" style="font-family:var(--mono);font-size:12px;color:var(--Gt)"></span>
+      </div>
+    </div>
+
+    <div class="ma">
+      <button class="btn btnS" onclick="cerrar('mpagar-pre')">Cancelar</button>
+      <button class="btn btnG" onclick="guardarPagoPre()">Registrar pago</button>
+    </div>
   </div>
 </div>
 
@@ -757,31 +902,55 @@ select option{background:var(--sf2)}
 <div id="mmovaho" class="mbg">
   <div class="modal">
     <div class="mhdl"></div>
-    <div class="mtt"><h3>↔ Mover dinero a ahorro</h3><button class="mcl" onclick="cerrar('mmovaho')">×</button></div>
-    <p style="font-size:12px;color:var(--tx2);margin-bottom:12px;line-height:1.5">
-      Registra el movimiento de dinero desde una cuenta hacia una meta de ahorro. El saldo de la cuenta disminuye y el acumulado de la meta aumenta.
-    </p>
-    <div class="f2">
-      <div class="fg"><label>Desde cuenta</label><select id="movaho-cta"></select></div>
-      <div class="fg"><label>Hacia meta de ahorro</label><select id="movaho-meta"></select></div>
+    <div class="mtt"><h3 id="mmovaho-titulo">↔ Mover ahorro</h3><button class="mcl" onclick="cerrar('mmovaho')">×</button></div>
+
+    <!-- Selector de dirección -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <button class="tto" id="movaho-btn-hacia" onclick="setMovAhoDir('hacia')"
+        style="padding:10px;border-color:var(--G);background:var(--Gb);color:var(--Gt)">
+        <span class="ti">💰→🎯</span>Débito → Ahorro
+      </button>
+      <button class="tto" id="movaho-btn-desde" onclick="setMovAhoDir('desde')"
+        style="padding:10px">
+        <span class="ti">🎯→💵</span>Ahorro → Débito
+      </button>
     </div>
+
+    <!-- Modo: débito → ahorro -->
+    <div id="movaho-blk-hacia">
+      <div class="f2">
+        <div class="fg"><label>Desde cuenta (débito)</label><select id="movaho-cta" onchange="prevMoverAhorro()"></select></div>
+        <div class="fg"><label>Hacia</label><select id="movaho-meta" onchange="prevMoverAhorro()"></select></div>
+      </div>
+    </div>
+
+    <!-- Modo: ahorro → débito -->
+    <div id="movaho-blk-desde" style="display:none">
+      <div class="f2">
+        <div class="fg"><label>Desde cuenta ahorro</label><select id="movaho-src-aho" onchange="prevMoverAhorro()"></select></div>
+        <div class="fg"><label>Hacia cuenta (débito)</label><select id="movaho-dst-deb" onchange="prevMoverAhorro()"></select></div>
+      </div>
+    </div>
+
     <div class="f2">
       <div class="fg"><label>Monto</label><input type="number" id="movaho-monto" placeholder="0" inputmode="decimal" oninput="prevMoverAhorro()"></div>
       <div class="fg"><label>Fecha</label><input type="date" id="movaho-fecha"></div>
     </div>
+
     <!-- Preview -->
     <div id="movaho-prev" style="background:var(--sf2);border-radius:var(--rsm);padding:10px 12px;margin-bottom:10px;display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:12px;color:var(--tx2)">Cuenta después del movimiento</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:12px;color:var(--tx2)" id="movaho-lbl-orig">Cuenta origen después</span>
         <span id="movaho-cta-after" style="font-family:var(--mono);font-size:13px;font-weight:600"></span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--tx2)">Meta después del movimiento</span>
+        <span style="font-size:12px;color:var(--tx2)" id="movaho-lbl-dest">Destino después</span>
         <span id="movaho-meta-after" style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Gt)"></span>
       </div>
     </div>
-    <div class="fg"><label>Nota (opcional)</label><input type="text" id="movaho-nota" placeholder="Ej: Ahorro mensual Nu"></div>
-    <div class="ma"><button class="btn btnS" onclick="cerrar('mmovaho')">Cancelar</button><button class="btn btnG" onclick="guardarMoverAhorro()">Mover ahorro</button></div>
+
+    <div class="fg"><label>Nota (opcional)</label><input type="text" id="movaho-nota" placeholder="Ej: Retiro cajita Nu"></div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mmovaho')">Cancelar</button><button class="btn btnG" onclick="guardarMoverAhorro()" id="movaho-btn-guardar">Mover</button></div>
   </div>
 </div>
 
@@ -956,6 +1125,16 @@ select option{background:var(--sf2)}
     </div>
     <div class="fg"><label>Color</label><input type="color" id="catcolor" value="#6366f1" style="height:38px"></div>
     <div class="ma"><button class="btn btnS" onclick="cerrar('mcat')">Cancelar</button><button class="btn btnP" onclick="guardarCat()">Guardar</button></div>
+  </div>
+</div>
+
+<!-- DETALLE CUOTAS TARJETA -->
+<div id="mdetalle-cuotas" class="mbg">
+  <div class="modal">
+    <div class="mhdl"></div>
+    <div class="mtt"><h3>📋 Detalle de cuotas activas</h3><button class="mcl" onclick="cerrar('mdetalle-cuotas')">×</button></div>
+    <div id="detalle-cuotas-content"></div>
+    <div class="ma"><button class="btn btnS" onclick="cerrar('mdetalle-cuotas')">Cerrar</button></div>
   </div>
 </div>
 
@@ -1165,17 +1344,30 @@ function pVehs(elId){
 function sTipo(tipo,btn){
   _tipoTx=tipo;
   const clsMap={gasto:'aG',ingreso:'aI',transferencia:'aTR'};
-  // Solo actualizar botones del selector de tipo (primeros 3 .tto del modal TX)
   document.querySelectorAll('.tts .tto').forEach(b=>{b.className='tto';});
   if(btn) btn.classList.add(clsMap[tipo]||'aG');
-  const isGasto=tipo==='gasto', isTransf=tipo==='transferencia';
+
+  const isGasto=tipo==='gasto', isTransf=tipo==='transferencia', isIng=tipo==='ingreso';
+
+  // Forma de pago (débito/crédito) → solo para gastos
   $('txtar-blk').style.display=isGasto?'block':'none';
+  // Cuenta destino ingreso → solo para ingresos
+  $('tx-ingreso-cta-blk').style.display=isIng?'block':'none';
+  // Categorías → no para transferencias
   $('tx-catblock').style.display=isTransf?'none':'flex';
+  // Cuenta origen + destino → solo para transferencias
   $('tx-ctadest-blk').style.display=isTransf?'flex':'none';
-  const filtro=tipo==='ingreso'?'ingreso':tipo==='gasto'?'gasto':null;
+
+  const filtro=isIng?'ingreso':isGasto?'gasto':null;
   pCats('txcat',filtro); cSubcats();
-  if(isGasto){ setUsaTarjeta(false); }
-  else { pCtas('txcta'); pCtas('txctadest'); }
+
+  if(isGasto){
+    setUsaTarjeta(false);
+  } else if(isIng){
+    pCtas('txcta-ing'); // poblar cuentas para ingreso
+  } else if(isTransf){
+    pCtas('txcta'); pCtas('txctadest');
+  }
 }
 
 function cSubcats(){
@@ -1230,14 +1422,14 @@ function sVTipo(tipo,btn){
 // ─── Abrir modales ─────────────────────────────────────────
 function abrirTx(){
   $('txfecha').value=HOY.toISOString().slice(0,10); _tipoTx='gasto';
-  // Reset tipo buttons — solo los del .tts (primeros 3)
   document.querySelectorAll('.tts .tto').forEach((b,i)=>{b.className='tto'+(i===0?' aG':'');});
   pCats('txcat','gasto'); cSubcats();
   pCtas('txctadest');
   $('tx-catblock').style.display='flex';
   $('tx-ctadest-blk').style.display='none';
+  $('tx-ingreso-cta-blk').style.display='none'; // oculto por defecto (empieza en gasto)
   $('txtar-blk').style.display='block';
-  setUsaTarjeta(false); // siempre empieza en débito
+  setUsaTarjeta(false);
   ['txmonto','txdesc','txnota'].forEach(id=>$(id).value='');
   if($('txcuotas')) $('txcuotas').value='1';
   if($('tx-cuota-preview')) $('tx-cuota-preview').textContent='';
@@ -1245,14 +1437,16 @@ function abrirTx(){
 }
 
 function abrirTrf(){
-  pCtas('trfori'); pCtas('trfdest'); $('trffecha').value=HOY.toISOString().slice(0,10);
+  pCtas('trfori'); // origen: solo cuentas líquidas
+  pCtas('trfdest','',true); // destino: incluye ahorro programado
+  $('trffecha').value=HOY.toISOString().slice(0,10);
   ['trfmonto','trfdesc'].forEach(id=>$(id).value='');
   prevTrf(); $('mtrf').classList.add('on');
 }
 
 function prevTrf(){
   const ori=_ctas.find(c=>c.id===$('trfori')?.value);
-  const dest=_ctas.find(c=>c.id===$('trfdest')?.value);
+  const dest=_ctas.find(c=>c.id===$('trfdest')?.value); // incluye ahorro programado
   $('trf-orig-prev').innerHTML=`<div class="tc-n">${ori?.nombre||'Origen'}</div><div class="tc-s">${ori?fmt(ori.saldo_real):'—'}</div>`;
   $('trf-dest-prev').innerHTML=`<div class="tc-n">${dest?.nombre||'Destino'}</div><div class="tc-s">${dest?fmt(dest.saldo_real):'—'}</div>`;
 }
@@ -1733,6 +1927,225 @@ async function diagTarjetas(){
   alert('Datos raw del Sheet:\n\n'+(msg||JSON.stringify(data,null,2)));
 }
 
+// ══════════════════════════════════════════════════════════════
+// AVANCE DE TARJETA
+// ══════════════════════════════════════════════════════════════
+function abrirAvance(tarId=''){
+  pTars('av-tar',true);
+  pCtas('av-cta');
+  if(tarId) $('av-tar').value=tarId;
+  $('av-fecha').value=HOY.toISOString().slice(0,10);
+  $('av-monto').value='';
+  $('av-costo').value='';
+  $('av-cuotas').value='1';
+  $('av-cuotas').dataset.manual='';
+  $('av-cuotas-hint').textContent='';
+  $('av-preview').style.display='none';
+  $('mavance').classList.add('on');
+}
+
+function prevAvance(){
+  const monto=Number($('av-monto')?.value)||0;
+  const costo=Number($('av-costo')?.value)||0;
+  if(!monto){$('av-preview').style.display='none';return;}
+
+  // Regla automática de cuotas
+  const cuotasAuto=monto<60000?1:36;
+  if($('av-cuotas').dataset.manual!=='true'){
+    $('av-cuotas').value=cuotasAuto;
+    $('av-cuotas-hint').textContent=monto<60000?'(< $60k → 1 cuota)':'(≥ $60k → 36 cuotas)';
+  }
+  const cuotas=Number($('av-cuotas').value)||1;
+
+  // Tasa de la tarjeta
+  const tarId=$('av-tar')?.value;
+  const tar=_tars.find(t=>t.id===tarId);
+  const tasaEA=Number(tar?.tasa_interes)||0;
+  const tasaMensual=tasaEA>0?Math.pow(1+tasaEA/100,1/12)-1:0;
+
+  // La base sobre la que se calculan cuotas incluye el costo del avance
+  const montoConCosto=monto+costo;
+  let cuotaVal,totalPagar,totalInt;
+  if(tasaMensual>0&&cuotas>1){
+    cuotaVal=Math.round(montoConCosto*tasaMensual/(1-Math.pow(1+tasaMensual,-cuotas)));
+    totalPagar=cuotaVal*cuotas;
+    totalInt=totalPagar-montoConCosto;
+  } else {
+    cuotaVal=Math.round(montoConCosto/cuotas);
+    totalPagar=cuotaVal*cuotas;
+    totalInt=0;
+  }
+
+  $('av-resumen').innerHTML=`
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Recibes</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--Gt)">${fmt(monto)}</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Costo banco${costo>0?' + int.':''}</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--At)">${fmt(costo+totalInt)}</div>
+      ${costo>0?`<div style="font-size:9px;color:var(--tx3)">Comisión: ${fmt(costo)} · Int: ${fmt(totalInt)}</div>`:''}
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Total a pagar</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--Rt)">${fmt(totalPagar)}</div>
+    </div>`;
+
+  const fechaBase=new Date(($('av-fecha').value||HOY.toISOString().slice(0,10))+'T12:00:00');
+  let html='';
+  let saldo=montoConCosto;
+  const MAX=cuotas<=8?cuotas:5;
+  for(let i=0;i<MAX;i++){
+    const mes=new Date(fechaBase.getFullYear(),fechaBase.getMonth()+i,1);
+    let intC=0,capC=0;
+    if(tasaMensual>0&&cuotas>1){
+      intC=Math.round(saldo*tasaMensual);
+      capC=cuotaVal-intC;
+      saldo=Math.max(0,saldo-capC);
+    } else { capC=cuotaVal; }
+    html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid var(--bd)">
+      <span style="color:var(--tx2)">Cuota ${i+1}/${cuotas} — ${MESES[mes.getMonth()].slice(0,3)} ${mes.getFullYear()}</span>
+      <span>${tasaMensual>0?`<span style="font-size:10px;color:var(--tx3)">Cap: ${fmt(capC)} · Int: ${fmt(intC)} </span>`:''}
+        <strong style="font-family:var(--mono);color:var(--Rt)">${fmt(cuotaVal)}</strong></span>
+    </div>`;
+  }
+  if(cuotas>MAX) html+=`<div style="font-size:11px;color:var(--tx3);text-align:center;padding-top:6px">...y ${cuotas-MAX} cuotas más de ${fmt(cuotaVal)}</div>`;
+  const mesUlt=new Date(fechaBase.getFullYear(),fechaBase.getMonth()+cuotas-1,1);
+  html+=`<div style="font-size:11px;color:var(--tx3);text-align:center;padding-top:6px">📅 Último pago: <strong style="color:var(--tx2)">${MESES[mesUlt.getMonth()]} ${mesUlt.getFullYear()}</strong></div>`;
+  $('av-plan').innerHTML=html;
+  $('av-preview').style.display='block';
+}
+
+async function guardarAvance(){
+  const monto=Number($('av-monto').value);
+  const costo=Number($('av-costo').value)||0;
+  const tarId=$('av-tar').value;
+  const ctaId=$('av-cta').value;
+  const fecha=$('av-fecha').value;
+  const cuotas=Number($('av-cuotas').value)||1;
+  if(!monto||monto<=0){toast('Ingresa el monto del avance');return;}
+  if(!tarId){toast('Selecciona la tarjeta');return;}
+  if(!ctaId){toast('Selecciona la cuenta destino');return;}
+
+  const nombreTar=_tars.find(t=>t.id===tarId)?.nombre||'';
+  // El monto que se carga a la tarjeta incluye el costo del avance
+  const montoCargo=monto+costo;
+
+  // 1. Registrar la compra en tarjeta (monto + costo → sube saldo_usado)
+  const r1=await apiPost({accion:'insertTransaccion',tipo:'gasto',fecha,
+    monto:montoCargo,cuenta_origen_id:'',tarjeta_id:tarId,cuotas,
+    categoria_id:'CATMPUK9NSRNZ7',
+    descripcion:`Avance tarjeta ${nombreTar}${costo>0?' (incl. costo '+fmt(costo)+')':''}`,
+    nota:`Avance en efectivo · Recibido: ${fmt(monto)} · Costo: ${fmt(costo)} · ${cuotas} cuota(s)`});
+  if(!r1?.ok){toast('❌ Error al registrar avance: '+(r1?.error||''));return;}
+
+  // 2. Acreditar solo el monto recibido en la cuenta débito
+  const r2=await apiPost({accion:'insertTransaccion',tipo:'ingreso',fecha,
+    monto,cuenta_origen_id:ctaId,
+    categoria_id:'CAT003',
+    descripcion:`Avance tarjeta recibido${costo>0?' — costo: '+fmt(costo):''}`,
+    nota:'Efectivo recibido del avance'});
+  if(!r2?.ok){toast('❌ Error al acreditar cuenta: '+(r2?.error||''));return;}
+
+  toast(`✅ Avance registrado · Recibiste ${fmt(monto)} · Costo ${fmt(costo)} · ${cuotas} cuota(s)`);
+  cerrar('mavance');
+  cTarjetas();
+  cDash();
+}
+
+// ══════════════════════════════════════════════════════════════
+// GESTIONAR CUOTAS EXISTENTES
+// ══════════════════════════════════════════════════════════════
+async function abrirGestionCuotas(){
+  // Poblar filtro de tarjetas
+  const tarSel=$('gc-tar-filter');
+  tarSel.innerHTML='<option value="">Todas las tarjetas</option>'+
+    _tars.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
+  $('gc-edit-blk').style.display='none';
+  await cargarCuotasGestion();
+  $('mgestion-cuotas').classList.add('on');
+}
+
+async function cargarCuotasGestion(){
+  $('gc-lista').innerHTML=`<div class="loading"><span class="sp"></span>Cargando...</div>`;
+  const tarId=$('gc-tar-filter')?.value||'';
+  const estado=$('gc-estado-filter')?.value||'';
+  const params={accion:'getCuotasTarjeta'};
+  if(tarId) params.tarjeta_id=tarId;
+  const cuotas=await api(params)||[];
+  const filtradas=estado?cuotas.filter(c=>c.estado===estado):cuotas;
+
+  if(!filtradas.length){
+    $('gc-lista').innerHTML=`<div class="empty" style="padding:20px"><div class="ei" style="font-size:28px">📋</div><p>Sin cuotas</p></div>`;
+    return;
+  }
+
+  $('gc-lista').innerHTML=filtradas.map(c=>{
+    const tar=_tars.find(t=>t.id===c.tarjeta_id);
+    const pagadas=Number(c.cuotas_pagadas)||0;
+    const total=Number(c.num_cuotas)||1;
+    const restantes=total-pagadas;
+    const pct=Math.min(Math.round((pagadas/total)*100),100);
+    const estColor=c.estado==='activo'?'var(--Bt)':'var(--Gt)';
+    return`<div style="border:1px solid var(--bd);border-radius:var(--rsm);padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${c.descripcion||'Sin descripción'}</div>
+          <div style="font-size:10px;color:var(--tx3)">${tar?.nombre||c.tarjeta_id} · ${pagadas}/${total} pagadas · ${restantes} restantes</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          <span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${c.estado==='activo'?'var(--Bb)':'var(--Gb)'};color:${estColor}">${c.estado}</span>
+          <button class="btn btnS btn-sm" style="font-size:11px;padding:3px 8px" onclick="editarCuota('${c.id}','${(c.descripcion||'').replace(/'/g,"\\'")}',${pagadas},${total},${c.cuota_valor||0},'${c.estado}')">✏️</button>
+          <button class="btn btnR btn-sm" style="font-size:11px;padding:3px 8px;background:var(--Rb);color:var(--Rt)" onclick="eliminarCuota('${c.id}','${(c.descripcion||'').replace(/'/g,"\\'")}')">🗑️</button>
+        </div>
+      </div>
+      <div class="pw" style="margin-bottom:4px"><div class="pb ${c.estado==='pagado'?'ok':'blue'}" style="width:${pct}%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3)">
+        <span>Cuota: <strong style="color:var(--tx2)">${fmt(c.cuota_valor)}/mes</strong></span>
+        <span>Total: <strong style="color:var(--tx2)">${fmt(c.total)}</strong></span>
+        <span>${pct}% pagado</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editarCuota(id,desc,pagadas,total,valor,estado){
+  $('gc-edit-id').value=id;
+  $('gc-edit-desc').textContent=desc;
+  $('gc-edit-pagadas').value=pagadas;
+  $('gc-edit-total').value=total;
+  $('gc-edit-valor').value=valor;
+  $('gc-edit-estado').value=estado;
+  $('gc-edit-blk').style.display='block';
+  $('gc-edit-blk').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function guardarEdicionCuota(){
+  const id=$('gc-edit-id').value;
+  if(!id){toast('Sin cuota seleccionada');return;}
+  const pagadas=Number($('gc-edit-pagadas').value)||0;
+  const total=Number($('gc-edit-total').value)||1;
+  const valor=Number($('gc-edit-valor').value)||0;
+  const estado=$('gc-edit-estado').value;
+  if(pagadas>total){toast('Cuotas pagadas no puede superar el total');return;}
+
+  const r=await apiPost({accion:'updateCuota',id,
+    cuotas_pagadas:pagadas,num_cuotas:total,cuota_valor:valor,estado});
+  if(r?.ok){
+    toast('✅ Cuota actualizada');
+    $('gc-edit-blk').style.display='none';
+    await cargarCuotasGestion();
+    cTarjetas();
+  } else toast('❌ '+(r?.error||'Error'));
+}
+
+async function eliminarCuota(id,desc){
+  if(!confirm(`¿Eliminar la cuota "${desc}"?\nEsta acción no se puede deshacer.`)) return;
+  const r=await apiPost({accion:'deleteCuota',id});
+  if(r?.ok){toast('✅ Cuota eliminada');await cargarCuotasGestion();cTarjetas();}
+  else toast('❌ '+(r?.error||'Error'));
+}
+
 async function cTarjetas(){
   const data=await api({accion:'getTarjetas'}); _tars=data||[];
   if(!_tars.length){$('tarlista').innerHTML=`<div class="empty"><div class="ei">💳</div><p>Sin tarjetas.</p></div>`;return;}
@@ -1740,7 +2153,9 @@ async function cTarjetas(){
     const pct=Math.min(t.uso_pct,100);
     const estUso=t.uso_pct>=90?'danger':t.uso_pct>=70?'warning':'ok';
     const tope=Number(t.tope_gasto)||0;
-    const topePct=tope>0?Math.min(Math.round((Number(t.saldo_usado)/tope)*100),120):0;
+    // tope=0 significa sin límite → no mostrar barra
+    const mostrarTope=tope>0;
+    const topePct=mostrarTope?Math.min(Math.round((Number(t.saldo_usado)/tope)*100),120):0;
     const estTope=topePct>=100?'danger':topePct>=80?'warning':'ok';
     const topeCuotas=Number(t.tope_cuotas)||0;
     const cuotasActivas=Number(t.num_cuotas_activas)||0;
@@ -1751,7 +2166,7 @@ async function cTarjetas(){
       <div class="ih">
         <div>
           <div class="it">💳 ${t.nombre}</div>
-          <div class="is">${t.banco} · corte día ${t.fecha_corte} · pago día ${t.fecha_pago}</div>
+          <div class="is">${t.banco} · corte día ${t.fecha_corte} · pago día ${t.fecha_pago} · ${t.tasa_interes||0}% E.A.</div>
         </div>
         <div style="display:flex;gap:6px;align-items:flex-start">
           <button class="btn btnS btn-sm" onclick="editarTarjeta('${t.id}')">✏️</button>
@@ -1770,30 +2185,52 @@ async function cTarjetas(){
         <span>Disponible: <strong style="color:var(--Gt)">${fmt(Number(t.limite)-Number(t.saldo_usado))}</strong></span>
       </div>
 
-      ${tope>0?`
+      ${mostrarTope?`
       <div style="font-size:10px;color:var(--tx3);margin-bottom:2px">Meta mensual: ${topePct}% de ${fmt(tope)}</div>
       <div class="pw"><div class="pb ${estTope}" style="width:${Math.min(topePct,100)}%"></div></div>
       <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">${topePct>=100?'⛔ Superaste tu meta mensual':'Quedan '+fmt(tope-Number(t.saldo_usado))}</div>`:''}
 
       <!-- Resumen del ciclo actual -->
       <div style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:500;color:var(--ACt);margin-bottom:8px">📋 Ciclo actual · desde ${inicioCiclo}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-          <div style="text-align:center">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:500;color:var(--ACt)">📋 Ciclo actual · desde ${inicioCiclo} · corte día ${t.fecha_corte}</div>
+          ${cuotasActivas>0?`<button class="btn btnS btn-sm" style="font-size:10px;padding:3px 8px" onclick="verDetalleCuotas('${t.id}')">Ver cuotas</button>`:''}
+        </div>
+
+        <!-- Gasto del ciclo -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd)">
+          <div>
             <div style="font-size:10px;color:var(--tx3)">Gastado en ciclo${t.gasto_ciclo_estimado?'<span style="color:var(--At)"> *</span>':''}</div>
-            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Rt)">${fmt(gastoCiclo)}</div>
+            <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--Rt)">${fmt(gastoCiclo)}</div>
           </div>
-          <div style="text-align:center">
+          <div style="text-align:right">
             <div style="font-size:10px;color:var(--tx3)">Cuotas activas</div>
-            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--At)">${cuotasActivas}${topeCuotas>0?' / máx '+topeCuotas:''}</div>
+            <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--At)">${cuotasActivas}${topeCuotas>0?' / máx '+topeCuotas:''}</div>
           </div>
-          <div style="text-align:center">
-            <div style="font-size:10px;color:var(--tx3)">Cuota mensual</div>
-            <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Bt)">${fmt(t.cuotas_mes_actual)}</div>
+        </div>
+
+        <!-- Pago mínimo proyectado -->
+        <div style="margin-top:8px">
+          <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">💳 Pago mínimo proyectado (próximo extracto · corte día ${t.fecha_corte})</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+            <div>
+              <div style="font-size:10px;color:var(--tx3)">Cuotas comprometidas</div>
+              <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Bt)">${fmt(t.cuotas_mes_actual)}</div>
+            </div>
+            <div style="color:var(--tx3);font-size:12px;flex-shrink:0">+</div>
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--tx3)">Gasto contado ciclo</div>
+              <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--Rt)">${fmt(gastoCiclo)}</div>
+            </div>
+            <div style="color:var(--tx3);font-size:12px;flex-shrink:0">=</div>
+            <div style="text-align:right;background:var(--Bb);padding:6px 10px;border-radius:var(--rsm);flex-shrink:0">
+              <div style="font-size:10px;color:var(--Bt)">Total estimado</div>
+              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--Bt)">${fmt(Number(t.cuotas_mes_actual)+gastoCiclo)}</div>
+            </div>
           </div>
         </div>
       </div>
-      ${t.gasto_ciclo_estimado?`<div style="font-size:10px;color:var(--At);padding:4px 0">* Estimado desde saldo total. Registra compras para ver el detalle real por ciclo.</div>`:''}
+      ${t.gasto_ciclo_estimado?`<div style="font-size:10px;color:var(--At);padding:0 0 8px">* Gasto ciclo estimado desde saldo total — registra compras para detalle real.</div>`:''}
 
       <div style="display:flex;gap:7px">
         <button class="btn btnO btn-sm" style="flex:1" onclick="abrirRegistrarCuotaParaTar('${t.id}')">+ Registrar compra</button>
@@ -1801,6 +2238,102 @@ async function cTarjetas(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Ver detalle de cuotas con fechas de pago ─────────────────
+async function verDetalleCuotas(tarId){
+  const tar = _tars.find(t=>t.id===tarId);
+  if(!tar){toast('Tarjeta no encontrada');return;}
+  $('detalle-cuotas-content').innerHTML=`<div class="loading"><span class="sp"></span>Cargando cuotas...</div>`;
+  $('mdetalle-cuotas').classList.add('on');
+
+  // Obtener cuotas desde el Sheet vía API
+  const cuotas = await api({accion:'getCuotasTarjeta', tarjeta_id:tarId});
+  if(!cuotas?.length){
+    $('detalle-cuotas-content').innerHTML=`<div class="empty"><div class="ei">📋</div><p>Sin cuotas activas</p></div>`;
+    return;
+  }
+
+  const hoy = new Date();
+  const diaCorte = Number(tar.fecha_corte)||30;
+  // Calcular próxima fecha de corte
+  function proximoCorte(desde){
+    const d = new Date(desde);
+    let corte = new Date(d.getFullYear(), d.getMonth(), diaCorte);
+    if(corte <= d) corte = new Date(d.getFullYear(), d.getMonth()+1, diaCorte);
+    return corte;
+  }
+
+  const totalMes = cuotas.filter(c=>c.estado==='activo').reduce((s,c)=>s+Number(c.cuota_valor),0);
+  let html = `<div style="background:var(--sf2);border-radius:var(--rsm);padding:10px;margin-bottom:12px">
+    <div style="font-size:11px;color:var(--tx2)">Total cuota mensual</div>
+    <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--Bt)">${fmt(totalMes)}</div>
+    <div style="font-size:11px;color:var(--tx3);margin-top:2px">Tasa: ${tar.tasa_interes||0}% E.A.</div>
+  </div>`;
+
+  // Ordenar por cuotas restantes (las que terminan pronto primero)
+  const activas = cuotas.filter(c=>c.estado==='activo')
+    .sort((a,b)=>(Number(a.num_cuotas)-Number(a.cuotas_pagadas))-(Number(b.num_cuotas)-Number(b.cuotas_pagadas)));
+
+  html += activas.map(c=>{
+    const pagadas = Number(c.cuotas_pagadas)||0;
+    const total   = Number(c.num_cuotas)||1;
+    const restantes = total - pagadas;
+    const cuotaVal  = Number(c.cuota_valor)||0;
+    // Calcular fecha aproximada de último pago
+    const mesInicio = Number(c.mes_inicio)||1;
+    const anioInicio= Number(c.anio_inicio)||2025;
+    const fechaUltima = new Date(anioInicio + Math.floor((mesInicio-1+total-1)/12),
+                                  (mesInicio-1+total-1)%12, diaCorte);
+    const terminaPronto = restantes <= 3;
+    const pctPag = Math.round((pagadas/total)*100);
+
+    return`<div style="border:1px solid var(--bd);border-radius:var(--rsm);padding:10px;margin-bottom:8px${terminaPronto?';border-color:var(--At)':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${c.descripcion||'Compra en cuotas'}</div>
+          <div style="font-size:11px;color:var(--tx3)">${pagadas}/${total} cuotas pagadas · ${pctPag}%</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:600;color:var(--Bt)">${fmt(cuotaVal)}/mes</div>
+          <div style="font-size:10px;color:${terminaPronto?'var(--At)':'var(--tx3)'}">
+            ${restantes} ${restantes===1?'cuota':'cuotas'} restantes${terminaPronto?' ⚠️':''}
+          </div>
+        </div>
+      </div>
+      <div class="pw"><div class="pb ${pctPag>=100?'ok':'blue'}" style="width:${pctPag}%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3);margin-top:3px">
+        <span>Total: ${fmt(c.total)}</span>
+        <span>Último pago: ${MESES[(fechaUltima.getMonth())].slice(0,3)} ${fechaUltima.getFullYear()}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  $('detalle-cuotas-content').innerHTML=html;
+}
+
+// ── Recálculo de cuotas por cambio de tasa ──────────────────
+let _tasaAnterior = 0;
+function recalcularCuotas(){
+  const tasaNueva = Number($('tartasa')?.value)||0;
+  const tarId = $('tar-edit-id')?.value;
+  if(!tarId||!tasaNueva) return; // solo al editar, no al crear
+  const tar = _tars.find(t=>t.id===tarId);
+  if(!tar) return;
+  const tasaVieja = Number(tar.tasa_interes)||0;
+  if(Math.abs(tasaNueva-tasaVieja)<0.01){$('tar-recalculo').style.display='none';return;}
+
+  // Mostrar preview del recálculo
+  const diff = tasaNueva - tasaVieja;
+  $('tar-recalculo-txt').innerHTML=`
+    Tasa anterior: <strong>${tasaVieja}%</strong> → Nueva: <strong>${tasaNueva}%</strong> (${diff>0?'+':''}${diff.toFixed(2)}%)<br>
+    Al guardar se actualizará la tasa. El monto de cada cuota ya fijo no cambia.<br>
+    <em style="color:var(--At)">Las cuotas futuras de nuevas compras sí usarán la tasa nueva para calcular intereses.</em>`;
+  $('tar-recalculo').style.display='block';
+}
+function aplicarRecalculo(){
+  $('tar-recalculo').style.display='none';
+  toast('ℹ️ Tasa actualizada. Nuevas compras usarán la nueva tasa.');
 }
 
 function abrirRegistrarCuota(){
@@ -1823,19 +2356,83 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 function prevCuota(){
   const monto=Number($('crq-monto')?.value)||0;
-  const cuotas=Number($('crq-cuotas')?.value)||1;
+  const cuotas=Math.max(1,Number($('crq-cuotas')?.value)||1);
   if(!monto||cuotas<1){$('crq-preview').style.display='none';return;}
-  const cuotaVal=Math.round(monto/cuotas);
-  const fechaBase=new Date($('crq-fecha')?.value||HOY);
+
+  // Obtener tasa de la tarjeta seleccionada
+  const tarId=$('crq-tar')?.value;
+  const tar=_tars.find(t=>t.id===tarId);
+  const tasaEA=Number(tar?.tasa_interes)||0; // % E.A. ej: 28.17
+
+  // Convertir tasa EA a tasa mensual: (1 + EA/100)^(1/12) - 1
+  const tasaMensual=tasaEA>0?Math.pow(1+tasaEA/100,1/12)-1:0;
+
+  // Calcular cuota con interés (sistema francés / cuota fija)
+  // Fórmula: C = P * r / (1 - (1+r)^-n)
+  let cuotaConInt, totalPagar, totalInteres;
+  if(tasaMensual>0 && cuotas>1){
+    cuotaConInt=Math.round(monto*tasaMensual/(1-Math.pow(1+tasaMensual,-cuotas)));
+    totalPagar=cuotaConInt*cuotas;
+    totalInteres=totalPagar-monto;
+  } else {
+    cuotaConInt=Math.round(monto/cuotas);
+    totalPagar=cuotaConInt*cuotas;
+    totalInteres=0;
+  }
+
+  const fechaBase=new Date($('crq-fecha')?.value+'T12:00:00'||HOY);
+
+  // Resumen financiero
+  $('crq-resumen').innerHTML=`
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Capital</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:600;color:var(--Bt)">${fmt(monto)}</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Intereses${tasaEA>0?' ('+tasaEA+'% E.A.)':''}</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:600;color:${totalInteres>0?'var(--At)':'var(--Gt)'}">${fmt(totalInteres)}</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:10px;color:var(--tx3)">Total a pagar</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:600;color:var(--Rt)">${fmt(totalPagar)}</div>
+    </div>`;
+
+  // Plan de cuotas con desglose capital/interés
   let html='';
-  for(let i=0;i<Math.min(cuotas,6);i++){
+  let saldoPendiente=monto;
+  const MAX_VISIBLE=cuotas<=8?cuotas:6;
+
+  for(let i=0;i<MAX_VISIBLE;i++){
     const mes=new Date(fechaBase.getFullYear(),fechaBase.getMonth()+i,1);
-    html+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--bd)">
-      <span style="color:var(--tx2)">Cuota ${i+1} / ${cuotas} — ${MESES[mes.getMonth()].slice(0,3)} ${mes.getFullYear()}</span>
-      <span style="font-family:var(--mono);color:var(--Rt)">${fmt(cuotaVal)}</span>
+    let interesCuota=0, capitalCuota=0;
+    if(tasaMensual>0 && cuotas>1){
+      interesCuota=Math.round(saldoPendiente*tasaMensual);
+      capitalCuota=cuotaConInt-interesCuota;
+      saldoPendiente=Math.max(0,saldoPendiente-capitalCuota);
+    } else {
+      capitalCuota=cuotaConInt;
+    }
+    const esUltima=i===cuotas-1;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:5px 0;border-bottom:1px solid var(--bd)${esUltima?';border-bottom:none':''}">
+      <span style="color:var(--tx2);min-width:110px">Cuota ${i+1}/${cuotas} — ${MESES[mes.getMonth()].slice(0,3)} ${mes.getFullYear()}</span>
+      <span style="display:flex;gap:8px;align-items:center">
+        ${tasaMensual>0?`<span style="font-size:10px;color:var(--tx3)">Capital: <strong style="color:var(--Bt)">${fmt(capitalCuota)}</strong> · Int: <strong style="color:var(--At)">${fmt(interesCuota)}</strong></span>`:''}
+        <span style="font-family:var(--mono);font-weight:600;color:var(--Rt)">${fmt(cuotaConInt)}</span>
+      </span>
     </div>`;
   }
-  if(cuotas>6) html+=`<div style="font-size:11px;color:var(--tx3);padding-top:4px">... y ${cuotas-6} cuotas más</div>`;
+  if(cuotas>MAX_VISIBLE){
+    html+=`<div style="font-size:11px;color:var(--tx3);padding-top:6px;text-align:center">
+      ... y ${cuotas-MAX_VISIBLE} cuotas más de ${fmt(cuotaConInt)} c/u
+    </div>`;
+  }
+
+  // Fecha del último pago
+  const mesUltimo=new Date(fechaBase.getFullYear(),fechaBase.getMonth()+cuotas-1,1);
+  html+=`<div style="font-size:11px;color:var(--tx3);padding-top:8px;text-align:center">
+    📅 Último pago: <strong style="color:var(--tx2)">${MESES[mesUltimo.getMonth()]} ${mesUltimo.getFullYear()}</strong>
+  </div>`;
+
   $('crq-preview-content').innerHTML=html;
   $('crq-preview').style.display='block';
 }
@@ -1883,17 +2480,32 @@ async function guardarPagoTar(){
   if(!monto||monto<=0){toast('Ingresa el monto del pago');return;}
   if(!tarId){toast('Selecciona la tarjeta');return;}
   if(!ctaId){toast('Selecciona la cuenta de débito');return;}
-  // 1. Registrar como gasto de la cuenta (sale dinero)
+
+  const tar=_tars.find(t=>t.id===tarId);
+  const nombreTar=tar?.nombre||'tarjeta';
+
+  // 1. Gasto de la cuenta débito (el dinero sale)
   const r1=await apiPost({accion:'insertTransaccion',tipo:'gasto',
     fecha:$('ptar-fecha').value,monto,cuenta_origen_id:ctaId,
-    categoria_id:'CAT016',descripcion:`Pago tarjeta ${_tars.find(t=>t.id===tarId)?.nombre||''}`});
-  if(!r1?.ok){toast('❌ Error al registrar');return;}
-  // 2. Bajar el saldo_usado de la tarjeta
-  const t=_tars.find(x=>x.id===tarId);
-  const nuevoSaldo=Math.max(0,Number(t?.saldo_usado||0)-monto);
+    categoria_id:'CAT016',
+    descripcion:`Pago ${nombreTar}`});
+  if(!r1?.ok){toast('❌ Error al registrar el gasto');return;}
+
+  // 2. Bajar saldo_usado de la tarjeta
+  const saldoActual=Number(tar?.saldo_usado||0);
+  const nuevoSaldo=Math.max(0,saldoActual-monto);
   const r2=await apiPost({accion:'updateTarjeta',id:tarId,saldo_usado:nuevoSaldo});
-  if(!r2?.ok){toast('❌ Error al actualizar saldo');return;}
-  toast('✅ Pago registrado — saldo actualizado');
+  if(!r2?.ok){toast('❌ Error al actualizar saldo tarjeta');return;}
+
+  // 3. Marcar cuotas como "se pagó una más" — avanzar cuotas_pagadas en Cuotas sheet
+  const r3=await apiPost({accion:'pagarCuotasTarjeta',tarjeta_id:tarId});
+  if(r3?.ok){
+    const avanzadas=r3.cuotas_avanzadas||0;
+    toast(`✅ Pago registrado · saldo bajó a ${fmt(nuevoSaldo)} · ${avanzadas} cuota(s) avanzada(s)`);
+  } else {
+    toast(`✅ Pago registrado · saldo bajó a ${fmt(nuevoSaldo)}`);
+  }
+
   cerrar('mpagar-tar'); cTarjetas(); cDash();
 }
 
@@ -1942,20 +2554,145 @@ async function guardarTarjeta(){
 // ════════════ PRÉSTAMOS ════════════
 async function cPrestamos(){
   const data=await api({accion:'getPrestamos'});
+  _prestamosData=data||[]; // guardar siempre
   if(!data?.length){$('prelista').innerHTML=`<div class="empty"><div class="ei">🏦</div><p>Sin préstamos.</p></div>`;return;}
   $('prelista').innerHTML=data.map(p=>{
     const pct=Math.min(p.porcentaje_pagado,100);
+    const est=p.estado==='activo'?'bR':'bG';
+    const restante=Number(p.monto_restante)||0;
+    const terminado=p.estado!=='activo'||restante<=0;
     return`<div class="ic">
-      <div class="ih"><div><div class="it">🏦 ${p.nombre}</div><div class="is">${p.entidad} · ${p.tasa}% EA</div></div><span class="bd_ ${p.estado==='activo'?'bR':'bG'}">${p.estado}</span></div>
+      <div class="ih">
+        <div>
+          <div class="it">🏦 ${p.nombre}</div>
+          <div class="is">${p.entidad} · ${p.tasa}% EA</div>
+        </div>
+        <span class="bd_ ${est}">${p.estado}</span>
+      </div>
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
         <span>Pagado: <strong style="color:var(--Gt)">${fmt(p.monto_pagado)}</strong></span>
-        <span>Restante: <strong style="color:var(--Rt)">${fmt(p.monto_restante)}</strong></span>
+        <span>Restante: <strong style="color:${terminado?'var(--Gt)':'var(--Rt)'}">${fmt(restante)}</strong></span>
       </div>
-      <div class="pw"><div class="pb ok" style="width:${pct}%"></div></div>
-      <div class="idet" style="margin-top:6px"><div>% pagado<strong>${pct}%</strong></div><div>Cuota<strong>${fmt(p.cuota_mensual)}</strong></div><div>Vence<strong>${p.fecha_fin||'—'}</strong></div><div>Total<strong>${fmt(p.monto_total)}</strong></div></div>
+      <div class="pw"><div class="pb ${pct>=100?'ok':'blue'}" style="width:${pct}%"></div></div>
+      <div class="idet" style="margin-top:6px;margin-bottom:10px">
+        <div>% pagado<strong>${pct}%</strong></div>
+        <div>Cuota/mes<strong>${fmt(p.cuota_mensual)}</strong></div>
+        <div>Vence<strong>${p.fecha_fin||'—'}</strong></div>
+        <div>Total<strong>${fmt(p.monto_total)}</strong></div>
+      </div>
+      ${!terminado?`
+      <button class="btn btnG btn-sm" style="width:100%" onclick="abrirPagoPre('${p.id}')">
+        💸 Pagar cuota — ${fmt(p.cuota_mensual)}
+      </button>`:`
+      <div style="text-align:center;font-size:12px;color:var(--Gt);padding:4px">✅ Préstamo saldado</div>`}
     </div>`;
   }).join('');
 }
+
+// ── Pagar préstamo ───────────────────────────────────────────
+let _prestamosData = [];
+
+async function cPrestamosData(){
+  const data=await api({accion:'getPrestamos'});
+  _prestamosData=data||[];
+  return data;
+}
+
+function abrirPagoPre(preId=''){
+  // Poblar selector de préstamos activos
+  const el=$('ppre-sel');
+  el.innerHTML=(_prestamosData.length?_prestamosData:_prestamosData)
+    .filter(p=>p.estado==='activo'&&Number(p.monto_restante)>0)
+    .map(p=>`<option value="${p.id}">${p.nombre} — restante: ${fmt(p.monto_restante)}</option>`)
+    .join('');
+  if(!el.innerHTML){toast('No hay préstamos activos');return;}
+  if(preId) el.value=preId;
+  pCtas('ppre-cta');
+  $('ppre-fecha').value=HOY.toISOString().slice(0,10);
+  $('ppre-nota').value='';
+  $('ppre-prev').style.display='none';
+  prevPagoPre();
+  $('mpagar-pre').classList.add('on');
+}
+
+function prevPagoPre(){
+  const preId=$('ppre-sel')?.value;
+  const pre=_prestamosData.find(p=>p.id===preId);
+  if(!pre){$('ppre-info').style.display='none';$('ppre-prev').style.display='none';return;}
+
+  // Mostrar info del préstamo
+  $('ppre-restante').textContent=fmt(pre.monto_restante);
+  $('ppre-cuota').textContent=fmt(pre.cuota_mensual);
+  $('ppre-pct').textContent=pre.porcentaje_pagado+'%';
+  $('ppre-bar').style.width=Math.min(pre.porcentaje_pagado,100)+'%';
+  $('ppre-info').style.display='block';
+
+  // Pre-llenar con cuota mensual
+  if(!$('ppre-monto').value) $('ppre-monto').value=pre.cuota_mensual||'';
+
+  // Preview después del pago
+  const monto=Number($('ppre-monto').value)||0;
+  if(monto>0){
+    const nuevoMontoPagado=Number(pre.monto_pagado)+monto;
+    const nuevoRestante=Math.max(0,Number(pre.monto_total)-nuevoMontoPagado);
+    const nuevoPct=Number(pre.monto_total)>0?Math.round((nuevoMontoPagado/Number(pre.monto_total))*100):0;
+    $('ppre-nuevo-saldo').textContent=fmt(nuevoRestante);
+    $('ppre-nuevo-saldo').style.color=nuevoRestante<=0?'var(--Gt)':'var(--Rt)';
+    $('ppre-nuevo-pct').textContent=nuevoPct+'%'+(nuevoRestante<=0?' — ¡Préstamo saldado! 🎉':'');
+    $('ppre-prev').style.display='block';
+  } else {
+    $('ppre-prev').style.display='none';
+  }
+}
+
+async function guardarPagoPre(){
+  const preId=$('ppre-sel').value;
+  const ctaId=$('ppre-cta').value;
+  const monto=Number($('ppre-monto').value);
+  const fecha=$('ppre-fecha').value;
+  const nota=$('ppre-nota').value;
+
+  if(!preId){toast('Selecciona el préstamo');return;}
+  if(!ctaId){toast('Selecciona la cuenta de débito');return;}
+  if(!monto||monto<=0){toast('Ingresa el monto del pago');return;}
+
+  const pre=_prestamosData.find(p=>p.id===preId);
+  const nombrePre=pre?.nombre||'préstamo';
+
+  // 1. Registrar gasto en la cuenta → categoría CAT017 (Cuota préstamo)
+  const r1=await apiPost({
+    accion:'insertTransaccion',
+    tipo:'gasto',
+    fecha,
+    monto,
+    cuenta_origen_id:ctaId,
+    categoria_id:'CAT017',      // Cuota préstamo
+    descripcion:`Cuota ${nombrePre}`,
+    nota:nota||`Pago de cuota préstamo ${nombrePre}`,
+    prestamo_id:preId,           // vincula al préstamo → actualiza monto_pagado
+  });
+  if(!r1?.ok){toast('❌ Error al registrar la transacción');return;}
+
+  // updatePagoPre ya se llama en insertTransaccion cuando hay prestamo_id
+  // Verificar si quedó saldado
+  const nuevoMontoPagado=(Number(pre?.monto_pagado)||0)+monto;
+  const total=Number(pre?.monto_total)||0;
+  if(nuevoMontoPagado>=total){
+    toast('🎉 ¡Préstamo saldado completamente!');
+  } else {
+    const restante=Math.max(0,total-nuevoMontoPagado);
+    toast(`✅ Pago registrado · Restante: ${fmt(restante)}`);
+  }
+
+  cerrar('mpagar-pre');
+  // Recargar préstamos
+  await cPrestamosData();
+  cPrestamos();
+  // Refrescar cuenta
+  const ctas=await api({accion:'getCuentas'}); _ctas=ctas||_ctas;
+}
+
+
 async function guardarPrestamo(){
   const r=await apiPost({accion:'insertPrestamo',nombre:$('prenombre').value,entidad:$('preentidad').value,monto_total:Number($('pretotal').value),monto_pagado:Number($('prepagado').value),cuota_mensual:Number($('precuota').value),tasa:Number($('pretasa').value),fecha_inicio:$('preinicio').value,fecha_fin:$('prefin').value,cuenta_debito_id:$('prect').value});
   if(r?.ok){toast('✅ Guardado');cerrar('mpre');cPrestamos();} else toast('❌ '+(r?.error||'Error'));
@@ -2072,59 +2809,145 @@ async function cAhorros(){
 }
 
 
+// ═══════════ MOVER AHORRO (bidireccional) ═══════════
+let _movAhoDir = 'hacia'; // 'hacia' = débito→ahorro | 'desde' = ahorro→débito
+
+function setMovAhoDir(dir){
+  _movAhoDir = dir;
+  const btnH=$('movaho-btn-hacia'), btnD=$('movaho-btn-desde');
+  const blkH=$('movaho-blk-hacia'), blkD=$('movaho-blk-desde');
+  if(dir==='hacia'){
+    btnH.style.cssText='padding:10px;border-color:var(--G);background:var(--Gb);color:var(--Gt)';
+    btnD.style.cssText='padding:10px';
+    blkH.style.display='block'; blkD.style.display='none';
+    $('mmovaho-titulo').textContent='💰→🎯 Débito a Ahorro';
+    $('movaho-lbl-orig').textContent='Cuenta débito después';
+    $('movaho-lbl-dest').textContent='Ahorro después';
+    $('movaho-btn-guardar').textContent='Mover a ahorro';
+  } else {
+    btnD.style.cssText='padding:10px;border-color:var(--O);background:var(--Ob);color:var(--Ot)';
+    btnH.style.cssText='padding:10px';
+    blkD.style.display='block'; blkH.style.display='none';
+    $('mmovaho-titulo').textContent='🎯→💵 Ahorro a Débito';
+    $('movaho-lbl-orig').textContent='Cuenta ahorro después';
+    $('movaho-lbl-dest').textContent='Cuenta débito después';
+    $('movaho-btn-guardar').textContent='Retirar a débito';
+  }
+  $('movaho-prev').style.display='none';
+  $('movaho-monto').value='';
+}
+
+function abrirMoverAhorro(ahorroId='', ctaDestinoId=''){
+  // Poblar débito → ahorro
+  pCtas('movaho-cta'); // cuentas líquidas como origen
+  const elMeta=$('movaho-meta');
+  const opsMetas=_ahorros_data.map(a=>`<option value="meta:${a.id}" data-tipo="meta" data-acum="${a.acumulado}" data-meta="${a.meta}">${a.nombre} — meta (${fmt(a.acumulado)}/${fmt(a.meta)})</option>`).join('');
+  const opsCtasProg=_ctas.filter(c=>c.tipo==='ahorro_programado').map(c=>`<option value="cta:${c.id}" data-tipo="cta" data-acum="${c.saldo_real}" data-meta="0">🎯 ${c.nombre} (${fmt(c.saldo_real)})</option>`).join('');
+  elMeta.innerHTML=opsMetas+opsCtasProg;
+  if(ahorroId) elMeta.value=`meta:${ahorroId}`;
+  if(ctaDestinoId) elMeta.value=`cta:${ctaDestinoId}`;
+
+  // Poblar ahorro → débito
+  const elSrcAho=$('movaho-src-aho');
+  elSrcAho.innerHTML=_ctas.filter(c=>c.tipo==='ahorro_programado').map(c=>`<option value="cta:${c.id}" data-saldo="${c.saldo_real}">🎯 ${c.nombre} (${fmt(c.saldo_real)})</option>`).join('');
+  if(ctaDestinoId) elSrcAho.value=`cta:${ctaDestinoId}`;
+  pCtas('movaho-dst-deb','',false); // cuentas líquidas como destino
+
+  $('movaho-fecha').value=HOY.toISOString().slice(0,10);
+  $('movaho-nota').value='';
+  $('movaho-prev').style.display='none';
+  // Siempre empieza en "hacia ahorro"
+  setMovAhoDir(ahorroId||ctaDestinoId?'hacia':'hacia');
+  $('mmovaho').classList.add('on');
+}
+
 function prevMoverAhorro(){
   const monto=Number($('movaho-monto').value)||0;
-  const ctaId=$('movaho-cta').value;
-  const cta=_ctas.find(c=>c.id===ctaId);
-  const ahoSel=$('movaho-meta').selectedOptions[0];
-  if(!monto||!cta||!ahoSel){$('movaho-prev').style.display='none';return;}
-  const acumActual=Number(ahoSel.dataset.acum)||0;
-  const metaTotal=Number(ahoSel.dataset.meta)||0;
-  const ctaDespues=Number(cta.saldo_real)-monto;
-  const metaDespues=acumActual+monto;
-  const pctDespues=metaTotal>0?Math.round((metaDespues/metaTotal)*100):0;
-  $('movaho-cta-after').textContent=fmt(ctaDespues);
-  $('movaho-cta-after').style.color=ctaDespues>=0?'var(--Gt)':'var(--Rt)';
-  $('movaho-meta-after').textContent=`${fmt(metaDespues)} (${pctDespues}%)`;
+  if(!monto){$('movaho-prev').style.display='none';return;}
+
+  if(_movAhoDir==='hacia'){
+    const ctaId=$('movaho-cta').value;
+    const cta=_ctas.find(c=>c.id===ctaId);
+    const ahoSel=$('movaho-meta').selectedOptions[0];
+    if(!cta||!ahoSel){$('movaho-prev').style.display='none';return;}
+    const acumActual=Number(ahoSel.dataset.acum)||0;
+    const metaTotal=Number(ahoSel.dataset.meta)||0;
+    const ctaDespues=Number(cta.saldo_real)-monto;
+    const metaDespues=acumActual+monto;
+    const pctDespues=metaTotal>0?Math.round((metaDespues/metaTotal)*100):0;
+    $('movaho-cta-after').textContent=fmt(ctaDespues);
+    $('movaho-cta-after').style.color=ctaDespues>=0?'var(--Gt)':'var(--Rt)';
+    $('movaho-meta-after').textContent=`${fmt(metaDespues)}${metaTotal>0?' ('+pctDespues+'%)':''}`;
+  } else {
+    const srcSel=$('movaho-src-aho').selectedOptions[0];
+    const dstId=$('movaho-dst-deb').value;
+    const dst=_ctas.find(c=>c.id===dstId);
+    if(!srcSel||!dst){$('movaho-prev').style.display='none';return;}
+    const saldoAho=Number(srcSel.dataset.saldo)||0;
+    $('movaho-cta-after').textContent=fmt(saldoAho-monto);
+    $('movaho-cta-after').style.color=(saldoAho-monto)>=0?'var(--Gt)':'var(--Rt)';
+    $('movaho-meta-after').textContent=fmt(Number(dst.saldo_real)+monto);
+    $('movaho-meta-after').style.color='var(--Gt)';
+  }
   $('movaho-prev').style.display='block';
 }
 
 async function guardarMoverAhorro(){
   const monto=Number($('movaho-monto').value);
-  const ctaOrigenId=$('movaho-cta').value;
-  const destVal=$('movaho-meta').value; // formato "meta:ID" o "cta:ID"
   const fecha=$('movaho-fecha').value;
   const nota=$('movaho-nota').value;
   if(!monto||monto<=0){toast('Ingresa un monto válido');return;}
-  if(!ctaOrigenId){toast('Selecciona la cuenta origen');return;}
-  if(!destVal){toast('Selecciona el destino');return;}
 
-  const [destTipo, destId] = destVal.split(':');
+  if(_movAhoDir==='hacia'){
+    // Débito → Ahorro (comportamiento original)
+    const ctaOrigenId=$('movaho-cta').value;
+    const destVal=$('movaho-meta').value;
+    if(!ctaOrigenId){toast('Selecciona la cuenta origen');return;}
+    if(!destVal){toast('Selecciona el destino');return;}
+    const [destTipo, destId]=destVal.split(':');
+    if(destTipo==='cta'){
+      // Transferencia a cuenta ahorro programado
+      if(ctaOrigenId===destId){toast('Las cuentas deben ser diferentes');return;}
+      const r=await apiPost({accion:'insertTransferencia',
+        cuenta_origen_id:ctaOrigenId,cuenta_destino_id:destId,
+        monto,fecha,descripcion:nota||'Depósito a ahorro programado'});
+      if(!r?.ok){toast('❌ '+r?.error);return;}
+    } else {
+      // Meta de ahorro (gasto + actualizar acumulado)
+      const r1=await apiPost({accion:'insertTransaccion',tipo:'gasto',fecha,monto,
+        cuenta_origen_id:ctaOrigenId,categoria_id:'CAT003',
+        descripcion:nota||'Movimiento a meta de ahorro'});
+      if(!r1?.ok){toast('❌ Error al registrar');return;}
+      const ahoSel=$('movaho-meta').selectedOptions[0];
+      const acumActual=Number(ahoSel.dataset.acum)||0;
+      const r2=await apiPost({accion:'updateAhorro',id:destId,acumulado:acumActual+monto});
+      if(!r2?.ok){toast('❌ Error al actualizar meta');return;}
+    }
+    toast('✅ Ahorro registrado');
 
-  if(destTipo==='cta'){
-    // Destino es cuenta ahorro programado → usar transferencia
-    if(ctaOrigenId===destId){toast('Las cuentas deben ser diferentes');return;}
-    const r=await apiPost({accion:'insertTransferencia',
-      cuenta_origen_id:ctaOrigenId,cuenta_destino_id:destId,
-      monto,fecha,descripcion:nota||'Ahorro programado'});
-    if(!r?.ok){toast('❌ Error: '+(r?.error||''));return;}
   } else {
-    // Destino es meta de ahorro → gasto de cuenta + actualizar acumulado
-    const r1=await apiPost({accion:'insertTransaccion',tipo:'gasto',fecha,monto,
-      cuenta_origen_id:ctaOrigenId,categoria_id:'CAT003',
-      descripcion:nota||'Movimiento a meta de ahorro'});
-    if(!r1?.ok){toast('❌ Error al registrar');return;}
-    const ahoSel=$('movaho-meta').selectedOptions[0];
-    const acumActual=Number(ahoSel.dataset.acum)||0;
-    const r2=await apiPost({accion:'updateAhorro',id:destId,acumulado:acumActual+monto});
-    if(!r2?.ok){toast('❌ Error al actualizar la meta');return;}
+    // Ahorro → Débito (dirección inversa)
+    const srcVal=$('movaho-src-aho').value; // "cta:ID"
+    const dstId=$('movaho-dst-deb').value;
+    if(!srcVal){toast('Selecciona la cuenta de ahorro');return;}
+    if(!dstId){toast('Selecciona la cuenta destino');return;}
+    const [,srcId]=srcVal.split(':');
+    if(srcId===dstId){toast('Las cuentas deben ser diferentes');return;}
+    // Transferencia: ahorro programado → cuenta débito
+    const r=await apiPost({accion:'insertTransferencia',
+      cuenta_origen_id:srcId,cuenta_destino_id:dstId,
+      monto,fecha,
+      descripcion:nota||'Retiro de ahorro a débito'});
+    if(!r?.ok){toast('❌ '+r?.error);return;}
+    toast('✅ Retiro registrado — saldo transferido a cuenta débito');
   }
 
-  toast('✅ Ahorro registrado');
   cerrar('mmovaho');
   const ctas=await api({accion:'getCuentas'}); _ctas=ctas||_ctas;
   cAhorros();
+  cDash();
 }
+
 
 async function guardarAhorro(){
   const r=await apiPost({accion:'insertAhorro',nombre:$('ahonombre').value,meta:Number($('ahometa').value),acumulado:Number($('ahoacum').value),aporte_mensual:Number($('ahoap').value),cuenta_id:$('ahocta').value,fecha_inicio:$('ahoinicio').value,fecha_meta:$('ahofmeta').value,descripcion:$('ahodesc').value});
@@ -2400,16 +3223,21 @@ async function guardarTx(){
   const tarjetaId = usandoTarjeta ? ($('txtar')?.value||'') : '';
   const cuotas = usandoTarjeta ? (Number($('txcuotas')?.value)||1) : 1;
 
-  // Cuenta origen: solo si es débito (para crédito no se resta nada de cuenta)
-  const ctaOrigen = usandoTarjeta ? '' : ($('txcta')?.value||'');
-  // Para ingresos siempre usar cuenta seleccionada
-  const ctaFinal = _tipoTx==='ingreso' ? ($('txcta')?.value||'') : ctaOrigen;
-
-  if(_tipoTx==='gasto'&&!usandoTarjeta&&!ctaOrigen){
-    toast('Selecciona la cuenta de débito');return;
+  // Cuenta según tipo:
+  // - Ingreso → txcta-ing (destino del dinero)
+  // - Gasto débito → txcta (dentro del bloque de débito)
+  // - Gasto crédito → sin cuenta (no resta nada)
+  let ctaFinal = '';
+  if(_tipoTx==='ingreso'){
+    ctaFinal = $('txcta-ing')?.value || '';
+    if(!ctaFinal){ toast('Selecciona la cuenta donde entra el ingreso'); return; }
+  } else if(_tipoTx==='gasto' && !usandoTarjeta){
+    ctaFinal = $('txcta')?.value || '';
+    if(!ctaFinal){ toast('Selecciona la cuenta de débito'); return; }
   }
-  if(usandoTarjeta&&!tarjetaId){
-    toast('Selecciona la tarjeta de crédito');return;
+
+  if(usandoTarjeta && !tarjetaId){
+    toast('Selecciona la tarjeta de crédito'); return;
   }
 
   const body={
@@ -2465,6 +3293,8 @@ inicializar();
 // Preview cuotas en tiempo real
 document.addEventListener('input', e=>{
   if(e.target.id==='txmonto'||e.target.id==='txcuotas') prevCuotaTx();
+  // Marcar como manual si el usuario toca las cuotas del avance
+  if(e.target.id==='av-cuotas') e.target.dataset.manual='true';
 });
 </script>
 </body>
