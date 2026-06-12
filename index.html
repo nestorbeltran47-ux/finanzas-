@@ -330,18 +330,34 @@ select option{background:var(--sf2)}
     <h1>Transacciones</h1>
     <div class="phr">
       <div class="msel"><select id="txm" onchange="cTxs()"></select><select id="txa" onchange="cTxs()"></select></div>
-      <button class="btn btnAC btn-sm" onclick="abrirTrf()" style="background:var(--ACb);color:var(--ACt);border:1px solid var(--AC)20">↔</button>
+      <button class="btn btnAC btn-sm" onclick="abrirTrf()" style="background:var(--ACb);color:var(--ACt);border:1px solid var(--AC)20">↔ Transferencia</button>
     </div>
   </div>
-  <div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
-    <select id="txft" onchange="rTxs()" class="fsel" style="flex:1;min-width:100px">
-      <option value="">Todos</option><option value="ingreso">Ingresos</option>
-      <option value="gasto">Gastos</option><option value="transferencia">Transferencias</option>
+
+  <!-- Filtros -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+    <select id="txft" onchange="rTxs()" class="fsel">
+      <option value="">Todos los tipos</option>
+      <option value="ingreso">💚 Ingresos</option>
+      <option value="gasto">🔴 Gastos</option>
+      <option value="transferencia">🔄 Transferencias</option>
     </select>
-    <select id="txfc" onchange="rTxs()" class="fsel" style="flex:1;min-width:130px">
+    <select id="txfc" onchange="rTxSubFilter()" class="fsel">
       <option value="">Todas las categorías</option>
     </select>
   </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+    <select id="txfsub" onchange="rTxs()" class="fsel">
+      <option value="">Todas las subcategorías</option>
+    </select>
+    <select id="txfdia" onchange="rTxs()" class="fsel">
+      <option value="">Todos los días</option>
+    </select>
+  </div>
+  <div id="tx-resumen" style="background:var(--sf2);border-radius:var(--rsm);padding:7px 12px;font-size:11px;color:var(--tx3);margin-bottom:9px">
+    <span id="tx-count">—</span>
+  </div>
+
   <div id="txlista"></div>
 </div>
 
@@ -746,7 +762,10 @@ select option{background:var(--sf2)}
       </div>
     </div>
     <div class="fg"><label>Descripción</label><input type="text" id="crq-desc" placeholder="Ej: TV Samsung, Viaje a Medellín..."></div>
-    <div class="fg"><label>Categoría</label><select id="crq-cat"></select></div>
+    <div class="f2">
+      <div class="fg"><label>Categoría</label><select id="crq-cat" onchange="cCrqSub()"></select></div>
+      <div class="fg"><label>Subcategoría</label><select id="crq-sub"><option value="">Sin subcategoría</option></select></div>
+    </div>
     <!-- Preview del plan -->
     <div id="crq-preview" style="display:none;background:var(--sf2);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
       <!-- Resumen financiero -->
@@ -1165,7 +1184,7 @@ select option{background:var(--sf2)}
     </div>
     <div class="f2">
       <div class="fg"><label>Unidad</label>
-        <select id="punidad"><option value="Unidad">Unidad</option><option value="Par">Par</option><option value="Kit">Kit</option><option value="Litros">Galones</option><option value="Metro">Metro</option><option value="Hora">Hora</option></select>
+        <select id="punidad"><option value="Unidad">Unidad</option><option value="Par">Par</option><option value="Kit">Kit</option><option value="Galones">Galones</option><option value="Metro">Metro</option><option value="Hora">Hora</option></select>
       </div>
       <div class="fg"><label>Descripción</label><input type="text" id="pdesc" placeholder="Opcional"></div>
     </div>
@@ -1648,44 +1667,124 @@ async function cTxs(){
   const {mes,anio}=gMS('txm','txa');
   $('txlista').innerHTML=`<div class="loading"><span class="sp"></span>Cargando...</div>`;
   const data=await api({accion:'getTransacciones',mes,anio}); _txs=data||[];
+
+  // Poblar categorías únicas del mes
+  const catIds=[...new Set(_txs.map(t=>t.categoria_id).filter(Boolean))];
   $('txfc').innerHTML='<option value="">Todas las categorías</option>'+
-    [...new Set(_txs.map(t=>t.categoria_id))].map(id=>{const c=_cats.find(x=>x.id===id)||{};return`<option value="${id}">${c.icono||''} ${c.nombre||id}</option>`;}).join('');
+    catIds.map(id=>{const c=_cats.find(x=>x.id===id)||{};
+      return`<option value="${id}">${c.icono||''} ${c.nombre||id}</option>`;}).join('');
+  $('txfsub').innerHTML='<option value="">Todas las subcategorías</option>';
+
+  // Poblar días únicos del mes ordenados
+  const dias=[...new Set(_txs.map(t=>(t.fecha||'').substring(8,10)).filter(Boolean))].sort((a,b)=>Number(a)-Number(b));
+  $('txfdia').innerHTML='<option value="">Todos los días</option>'+
+    dias.map(d=>`<option value="${d}">Día ${Number(d)}</option>`).join('');
+
   rTxs();
 }
+
+function rTxSubFilter(){
+  const catId=$('txfc').value;
+  const subs=_cats.filter(c=>c.categoria_padre_id===catId);
+  const el=$('txfsub');
+  el.innerHTML='<option value="">Todas las subcategorías</option>'+
+    subs.map(c=>`<option value="${c.id}">${c.icono||''} ${c.nombre}</option>`).join('');
+  rTxs();
+}
+
 function rTxs(){
-  const tipo=$('txft').value,cat=$('txfc').value;
-  let txs=_txs;
+  const tipo=$('txft').value;
+  const cat=$('txfc').value;
+  const sub=$('txfsub').value;
+  const dia=$('txfdia').value;
+  let txs=[..._txs];
   if(tipo) txs=txs.filter(t=>t.tipo===tipo);
-  if(cat) txs=txs.filter(t=>t.categoria_id===cat||t.subcategoria_id===cat);
+  if(cat)  txs=txs.filter(t=>t.categoria_id===cat||t.subcategoria_id===cat);
+  if(sub)  txs=txs.filter(t=>t.subcategoria_id===sub);
+  if(dia)  txs=txs.filter(t=>(t.fecha||'').substring(8,10)===dia);
+
+  const totalGas=txs.filter(t=>t.tipo==='gasto').reduce((s,t)=>s+Number(t.monto),0);
+  const totalIng=txs.filter(t=>t.tipo==='ingreso').reduce((s,t)=>s+Number(t.monto),0);
+  $('tx-count').innerHTML=`<strong>${txs.length}</strong> transacciones`+
+    (totalIng?` &nbsp;·&nbsp; <span style="color:var(--Gt)">+${fmt(totalIng)}</span>`:'')+
+    (totalGas?` &nbsp;·&nbsp; <span style="color:var(--Rt)">-${fmt(totalGas)}</span>`:'');
+
   rTxList('txlista',txs,true);
 }
+
 function rTxList(cid,txs,showDel=false){
   const el=$(cid);
   if(!txs?.length){el.innerHTML=`<div class="empty"><div class="ei">📭</div><p>Sin transacciones</p></div>`;return;}
-  el.innerHTML=`<div class="txl">`+txs.map(t=>{
-    const cat=_cats.find(c=>c.id===t.categoria_id)||{};
-    const sub=_cats.find(c=>c.id===t.subcategoria_id);
-    const ctaO=_ctas.find(c=>c.id===t.cuenta_origen_id)||{};
-    const ctaD=_ctas.find(c=>c.id===t.cuenta_destino_id)||{};
-    const signo=t.tipo==='ingreso'?'+':t.tipo==='gasto'?'-':'';
-    const cuotas=Number(t.cuotas)>1?` <span class="bd_ bAC" style="font-size:10px">${t.cuota_actual}/${t.cuotas}</span>`:'';
-    const subLabel=sub?` · ${sub.icono}${sub.nombre}`:'';
-    const ctaLabel=t.tipo==='transferencia'?`${ctaO.nombre||'—'} → ${ctaD.nombre||'—'}`:ctaO.nombre||'—';
-    return`<div class="txi">
-      <div class="txic ${t.tipo}">${t.tipo==='transferencia'?'↔':cat.icono||'💸'}</div>
-      <div class="txin">
-        <div class="txd">${t.descripcion||cat.nombre||'Sin descripción'}</div>
-        <div class="txm">${t.fecha} · ${ctaLabel}${subLabel}${cuotas}</div>
+
+  // Agrupar por fecha
+  const grupos={};
+  txs.forEach(t=>{const f=t.fecha||'';if(!grupos[f])grupos[f]=[];grupos[f].push(t);});
+  const fechas=Object.keys(grupos).sort((a,b)=>b.localeCompare(a));
+
+  el.innerHTML=fechas.map(fecha=>{
+    const txsDia=grupos[fecha];
+    const totalDia=txsDia.reduce((s,t)=>s+(t.tipo==='gasto'?-1:t.tipo==='ingreso'?1:0)*Number(t.monto),0);
+    const d=fecha.length>=10?Number(fecha.substring(8,10)):0;
+    const mIdx=fecha.length>=10?Number(fecha.substring(5,7))-1:0;
+    const yr=fecha.length>=10?fecha.substring(0,4):'';
+    const fechaFmt=d?`${d} ${MESES[mIdx]?.slice(0,3)||''} ${yr}`:'';
+
+    const filas=txsDia.map(t=>{
+      const cat=_cats.find(c=>c.id===t.categoria_id)||{};
+      const sub=_cats.find(c=>c.id===t.subcategoria_id);
+      const ctaO=_ctas.find(c=>c.id===t.cuenta_origen_id)||{};
+      const ctaD=_ctas.find(c=>c.id===t.cuenta_destino_id)||{};
+      const tar=_tars.find(t2=>t2.id===t.tarjeta_id);  // tarjeta de crédito
+      const signo=t.tipo==='ingreso'?'+':t.tipo==='gasto'?'-':'';
+      const colMonto=t.tipo==='ingreso'?'var(--Gt)':t.tipo==='gasto'?'var(--Rt)':'var(--tx2)';
+      const cuotasBadge=Number(t.cuotas)>1?`<span style="font-size:9px;padding:1px 6px;border-radius:10px;background:var(--ACb);color:var(--ACt);margin-left:4px">${t.cuota_actual||1}/${t.cuotas}</span>`:'';
+
+      // Fuente del pago: cuenta débito O tarjeta de crédito
+      let fuenteLabel='';
+      if(t.tipo==='transferencia'){
+        fuenteLabel=`${ctaO.nombre||'—'} → ${ctaD.nombre||'—'}`;
+      } else if(tar){
+        fuenteLabel=`💳 ${tar.nombre}`;
+      } else if(ctaO.nombre){
+        fuenteLabel=`🏦 ${ctaO.nombre}`;
+      }
+
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--bd)">
+        <div class="txic ${t.tipo}" style="width:38px;height:38px;font-size:19px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+          ${t.tipo==='transferencia'?'↔':cat.icono||'💸'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:13px">${cat.nombre||'Sin categoría'}</span>
+            ${sub?`<span style="color:var(--tx3);font-size:12px">›</span><span style="font-size:12px;color:var(--tx2)">${sub.icono||''} ${sub.nombre}</span>`:''}
+            ${cuotasBadge}
+          </div>
+          <div style="font-size:11px;color:var(--tx3)">
+            ${fuenteLabel?`<span>${fuenteLabel}</span>`:''}
+            ${t.descripcion?`<span style="color:var(--tx2)"> · ${t.descripcion}</span>`:''}
+          </div>
+        </div>
+        <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:${colMonto};flex-shrink:0">
+          ${signo}${fmt(t.monto)}
+        </div>
+        ${showDel?`<button class="tdel" onclick="elimTx('${t.id}')" style="flex-shrink:0">×</button>`:''}
+      </div>`;
+    }).join('');
+
+    return`<div style="margin-bottom:10px;background:var(--sf);border-radius:var(--r);overflow:hidden;border:1px solid var(--bd)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--sf2)">
+        <span style="font-size:12px;font-weight:600;color:var(--tx2)">${fechaFmt}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${totalDia>=0?'var(--Gt)':'var(--Rt)'}">${totalDia>=0?'+':''}${fmt(totalDia)}</span>
       </div>
-      <div class="txa ${t.tipo}">${signo}${fmt(t.monto)}</div>
-      ${showDel?`<button class="tdel" onclick="elimTx('${t.id}')">×</button>`:''}
+      ${filas}
     </div>`;
-  }).join('')+`</div>`;
+  }).join('');
 }
+
 async function elimTx(id){
-  if(!confirm('¿Eliminar?')) return;
+  if(!confirm('¿Eliminar esta transacción?')) return;
   const r=await apiPost({accion:'deleteTransaccion',id});
-  if(r?.ok){toast('Eliminada');cTxs();} else toast('❌ Error');
+  if(r?.ok){toast('✅ Eliminada');cTxs();} else toast('❌ Error');
 }
 
 // ════════════ PRESUPUESTOS ════════════
@@ -1699,7 +1798,7 @@ function setPQuincena(q){
     btn.className=active?'btn btn-sm':'btn btnS btn-sm';
     btn.style.cssText=active?'border-color:var(--AC);background:var(--ACb);color:var(--ACt);padding:4px 10px':'padding:4px 10px';
   });
-  renderPres();
+  renderPresList(); // solo re-renderiza la lista sin ir a la API
 }
 
 function setPTab(tab){
@@ -1752,12 +1851,13 @@ async function cPres(){
     $('plista').innerHTML=`<div class="empty"><div class="ei">📋</div><p>Sin presupuestos.<br>Toca "Nuevo mes" o "+".</p></div>`;
     return;
   }
+  renderPresList();
+}
 
+function renderPresList(){
+  if(!_pres.length) return;
   // Agrupar: primero categorías principales, luego subcategorías debajo
   let sorted=[..._pres].sort((a,b)=>{
-    const na=a.nombre_padre||a.nombre_mostrar;
-    const nb=b.nombre_padre||b.nombre_mostrar;
-    if(na!==nb) return na.localeCompare(nb);
     if(!a.nombre_padre&&b.nombre_padre) return -1;
     if(a.nombre_padre&&!b.nombre_padre) return 1;
     return Number(b.porcentaje)-Number(a.porcentaje);
@@ -2415,7 +2515,7 @@ function aplicarRecalculo(){
 }
 
 function abrirRegistrarCuota(){
-  pTars('crq-tar', true); pCats('crq-cat','gasto');
+  pTars('crq-tar', true); pCats('crq-cat','gasto'); cCrqSub();
   $('crq-fecha').value=HOY.toISOString().slice(0,10);
   ['crq-monto','crq-desc'].forEach(id=>$(id).value='');
   $('crq-cuotas').value='1';
@@ -2432,6 +2532,14 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('crq-monto')?.addEventListener('input', prevCuota);
   $('crq-cuotas')?.addEventListener('change', prevCuota);
 });
+function cCrqSub(){
+  const catId=$('crq-cat')?.value;
+  const el=$('crq-sub'); if(!el) return;
+  const subs=_cats.filter(c=>c.categoria_padre_id===catId);
+  el.innerHTML='<option value="">Sin subcategoría</option>'+
+    subs.map(c=>`<option value="${c.id}">${c.icono||''} ${c.nombre}</option>`).join('');
+}
+
 function prevCuota(){
   const monto=Number($('crq-monto')?.value)||0;
   const cuotas=Math.max(1,Number($('crq-cuotas')?.value)||1);
@@ -2522,6 +2630,7 @@ async function guardarCuotaReg(){
   const r=await apiPost({accion:'insertTransaccion',tipo:'gasto',
     fecha:$('crq-fecha').value,monto,cuenta_origen_id:'',
     categoria_id:$('crq-cat').value,
+    subcategoria_id:$('crq-sub')?.value||'',
     descripcion:$('crq-desc').value||'Compra en tarjeta',
     tarjeta_id:tarId,cuotas:Number($('crq-cuotas').value)});
   if(r?.ok){toast('✅ Compra registrada — cuotas creadas');cerrar('mcuota-reg');cTarjetas();}
@@ -3052,7 +3161,7 @@ async function cVehTxs(){
       <div class="sc B"><div class="sl">Km actual</div><div class="sv B">${(stats.km_actual||0).toLocaleString('es-CO')}</div></div>
       <div class="sc G"><div class="sl">Rendimiento</div><div class="sv G">${stats.rendimiento_km_galon||'—'} km/gal</div></div>
       <div class="sc A"><div class="sl">Costo/km gasolina</div><div class="sv A">${stats.costo_por_km?fmt(stats.costo_por_km):'—'}</div></div>
-      <div class="sc R"><div class="sl">Litros totales</div><div class="sv R">${stats.total_galones||0} L</div></div>
+      <div class="sc R"><div class="sl">Galones totales</div><div class="sv R">${stats.total_galones||0} gal</div></div>
       <div class="sc B"><div class="sl">Mantenimientos</div><div class="sv B">${stats.num_mantenimientos}</div></div>`;
   }
   const tipoIcon={gasolina:'⛽',seguro:'🛡',parqueadero:'🅿️',multa:'🚨',peaje:'🛣',otro:'🔖'};
@@ -3062,7 +3171,7 @@ async function cVehTxs(){
       <div class="txic gasto">${tipoIcon[t.tipo]||'🚘'}</div>
       <div class="txin">
         <div class="txd">${t.descripcion||t.tipo} ${t.km_registro>0?' · '+Number(t.km_registro).toLocaleString('es-CO')+' km':''}</div>
-        <div class="txm">${t.fecha}${t.litros>0?' · '+t.litros+' L':''}${t.estacion?' · '+t.estacion:''}</div>
+        <div class="txm">${t.fecha}${t.litros>0?' · '+t.litros+' gal':''}${t.estacion?' · '+t.estacion:''}</div>
       </div>
       <div class="txa gasto">-${fmt(t.monto)}</div>
       <button class="tdel" onclick="elimVtx('${t.id}')">×</button>
