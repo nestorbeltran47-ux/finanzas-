@@ -403,6 +403,16 @@ select option{background:var(--sf2)}
       </div>
     </div>
     <div class="card" style="padding:13px 13px 4px"><div id="plista"><div class="loading"><span class="sp"></span>Cargando...</div></div></div>
+
+    <!-- Gastos NO presupuestados -->
+    <div id="p-no-pres" style="display:none;margin-top:10px;background:var(--Rb);border:1px solid var(--Rt)40;border-radius:var(--r);padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:var(--Rt)">⚠️ Gastos sin presupuesto</div>
+        <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--Rt)" id="p-no-pres-total">$0</div>
+      </div>
+      <div id="p-no-pres-lista"></div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:6px">Estos gastos no tienen presupuesto asignado este mes</div>
+    </div>
   </div>
   <!-- Panel ingresos -->
   <div id="ppanel-ing" style="display:none">
@@ -1623,28 +1633,50 @@ function quitarParte(i){_mantPartes.splice(i,1);renderMantPartes();}
 // ════════════ DASHBOARD ════════════
 async function cDash(){
   const {mes,anio}=gMS('dm','da');
-  $('abn').innerHTML=''; // limpiar alertas inmediatamente al cambiar mes
+  $('abn').innerHTML='';
   $('dstats').innerHTML=`<div class="loading" style="grid-column:1/-1"><span class="sp"></span>Cargando...</div>`;
   const [dash,alertas]=await Promise.all([api({accion:'getDashboard',mes,anio}),api({accion:'getAlertas',mes,anio})]);
   if(!dash) return;
-  // Mantener separados: líquidas vs ahorro programado
-  const ctasLiq = dash.cuentas || [];
-  const ctasAhoProg = dash.cuentas_ahorro_programado || [];
-  // _ctas tiene TODAS (para poblar selects de mover ahorro, etc)
-  _ctas = [...ctasLiq, ...ctasAhoProg].length ? [...ctasLiq, ...ctasAhoProg] : _ctas;
-  _tars = dash.tarjetas || _tars;
+  const ctasLiq=dash.cuentas||[];
+  const ctasAhoProg=dash.cuentas_ahorro_programado||[];
+  _ctas=[...ctasLiq,...ctasAhoProg].length?[...ctasLiq,...ctasAhoProg]:_ctas;
+  _tars=dash.tarjetas||_tars;
 
   $('abn').innerHTML=(alertas?.alertas||[]).slice(0,4).map(a=>`<div class="alp ${a.tipo}">${a.mensaje}</div>`).join('');
 
-  const b = dash.balance;
-  // Saldo disponible = solo cuentas líquidas (histórico, no depende del mes)
-  const totalDisp = ctasLiq.reduce((s,c)=>s+Number(c.saldo_real),0);
+  const b=dash.balance;
+  const bDisp=dash.balance_disponible??b;
+  const totalDisp=ctasLiq.reduce((s,c)=>s+Number(c.saldo_real),0);
+  const movidoAho=dash.movido_ahorro||0;
+  const ingDisp=dash.ingreso_disponible??dash.total_ingresos;
+
   $('dstats').innerHTML=`
-    <div class="sc G"><div class="sl">Ingresos del mes</div><div class="sv G">${fmt(dash.total_ingresos)}</div></div>
+    <!-- Módulo 1: Ingresos brutos -->
+    <div class="sc G" style="grid-column:1/-1">
+      <div class="sl">💰 Ingresos brutos del mes</div>
+      <div class="sv G">${fmt(dash.total_ingresos)}</div>
+      <div class="ss">Todo lo que entró a tus cuentas</div>
+    </div>
+
+    <!-- Módulo 2: Ingreso disponible real -->
+    <div class="sc B" style="grid-column:1/-1;background:var(--Bb)20">
+      <div class="sl">🏦 Ingreso disponible (sin ahorros)</div>
+      <div class="sv B">${fmt(ingDisp)}</div>
+      <div class="ss" style="display:flex;gap:8px;flex-wrap:wrap">
+        <span>Bruto: ${fmt(dash.total_ingresos)}</span>
+        ${movidoAho>0?`<span style="color:var(--At)">− Movido a ahorro: ${fmt(movidoAho)}</span>`:''}
+        <span style="color:var(--tx3)">= Lo que realmente quedó disponible</span>
+      </div>
+    </div>
+
     <div class="sc R"><div class="sl">Gastos del mes</div><div class="sv R">${fmt(dash.total_gastos)}</div></div>
-    <div class="sc ${b>=0?'G':'R'}"><div class="sl">Balance (ing - gas)</div><div class="sv ${b>=0?'G':'R'}">${fmt(b)}</div><div class="ss">${dash.num_transacciones} movimientos · transf. no afectan</div></div>
+    <div class="sc ${bDisp>=0?'G':'R'}">
+      <div class="sl">Balance disponible</div>
+      <div class="sv ${bDisp>=0?'G':'R'}">${fmt(bDisp)}</div>
+      <div class="ss">${dash.num_transacciones} movimientos</div>
+    </div>
     <div class="sc R"><div class="sl">Total deuda</div><div class="sv R">${fmt(dash.total_deuda)}</div></div>
-    <div class="sc B"><div class="sl">Saldo disponible</div><div class="sv B">${fmt(totalDisp)}</div><div class="ss">sin ahorro programado</div></div>`;
+    <div class="sc B"><div class="sl">Saldo líquido</div><div class="sv B">${fmt(totalDisp)}</div><div class="ss">en cuentas débito</div></div>`;
 
   $('dcats').innerHTML=(dash.top_categorias||[]).map(c=>`
     <div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--bd)">
@@ -1823,17 +1855,20 @@ function cPresSubcats(){
 async function cPres(){
   const{mes,anio}=gMS('pm','pa');
   $('plista').innerHTML=`<div class="loading"><span class="sp"></span>Cargando...</div>`;
-  _ingData=null; // reset para forzar recarga
-  const data=await api({accion:'getPresupuestoMes',mes,anio}); _pres=data||[];
+  _ingData=null;
+  const resp=await api({accion:'getPresupuestoMes',mes,anio});
+  // El backend retorna {presupuestos:[], no_presupuestado:{total, categorias:[]}}
+  // Compatibilidad: si viene array directo (versión vieja) también funciona
+  const noPres=resp?.no_presupuestado||{total:0,categorias:[]};
+  _pres=Array.isArray(resp)?resp:(resp?.presupuestos||[]);
+
   const tot=_pres.reduce((s,p)=>s+Number(p.monto_presupuestado),0);
   const gas=_pres.reduce((s,p)=>s+Number(p.monto_ejecutado),0);
   const pG=tot>0?Math.round((gas/tot)*100):0;
   const q1Ejec=_pres.reduce((s,p)=>s+Number(p.q1_ejecutado||0),0);
   const q2Ejec=_pres.reduce((s,p)=>s+Number(p.q2_ejecutado||0),0);
-  // Planeado por quincena: suma presupuestos cuya quincena de ejecución coincide
   const q1Plan=_pres.filter(p=>Number(p.quincena_ejecucion)===1).reduce((s,p)=>s+Number(p.monto_presupuestado),0);
   const q2Plan=_pres.filter(p=>Number(p.quincena_ejecucion)===2).reduce((s,p)=>s+Number(p.monto_presupuestado),0);
-  // Sin quincena asignada: repartir a la mitad en cada una para referencia
   const sinQ=_pres.filter(p=>!Number(p.quincena_ejecucion)).reduce((s,p)=>s+Number(p.monto_presupuestado),0);
 
   $('pq1-plan').textContent=fmt(q1Plan + sinQ/2);
@@ -1846,6 +1881,19 @@ async function cPres(){
     <div class="sc R"><div class="sl">Ejecutado</div><div class="sv R">${fmt(gas)}</div></div>
     <div class="sc G"><div class="sl">Disponible</div><div class="sv G">${fmt(tot-gas)}</div></div>
     <div class="sc ${pG>=100?'R':pG>=80?'A':'G'}"><div class="sl">% global</div><div class="sv ${pG>=100?'R':pG>=80?'A':'G'}">${pG}%</div></div>`;
+
+  // Bloque gastos NO presupuestados
+  const npTotal=Number(noPres.total)||0;
+  const npCats=Object.values(noPres.categorias||{}).sort((a,b)=>b.total-a.total);
+  $('p-no-pres').style.display=npTotal>0?'block':'none';
+  if(npTotal>0){
+    $('p-no-pres-total').textContent=fmt(npTotal);
+    $('p-no-pres-lista').innerHTML=npCats.slice(0,5).map(c=>
+      `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0">
+        <span style="color:var(--tx2)">${c.icono||'💸'} ${c.nombre}</span>
+        <span style="font-family:var(--mono);color:var(--Rt)">${fmt(c.total)}</span>
+      </div>`).join('');
+  }
 
   if(!_pres.length){
     $('plista').innerHTML=`<div class="empty"><div class="ei">📋</div><p>Sin presupuestos.<br>Toca "Nuevo mes" o "+".</p></div>`;
